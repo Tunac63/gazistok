@@ -3,6 +3,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database"; // Realtime için bu
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAKfvYLMvgvjEm70cTsv0hGu1Ut_2fZIU8",
@@ -19,3 +20,5 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getDatabase(app); // ✅ Realtime Database
+export const messaging = getMessaging(app);
+export { getToken, onMessage };

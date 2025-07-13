@@ -1,3 +1,4 @@
+/* Base font and smoothing */
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -5,9 +6,84 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #fff; /* Beyaz arka plan */
+  color: #212529;
 }
 
+/* Code block style */
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Custom nav link hover and style */
+.nav-link-custom {
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: all 0.25s ease-in-out;
+  color: #0d6efd !important;
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.6rem;
+}
+
+.nav-link-custom:hover {
+  text-decoration: none;
+  background-color: rgba(13, 110, 253, 0.1);
+  color: #084298 !important;
+}
+
+/* Shadowed card hover effect */
+.card-hoverable {
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.card-hoverable:hover {
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  transform: translateY(-3px);
+}
+
+/* Tooltip-like hover effect on save-lock */
+.lock-disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Button hover effect */
+.btn:hover {
+  filter: brightness(1.08);
+}
+
+/* Premium heading style */
+h1, h2, h3, h4, h5 {
+  font-family: 'Poppins', 'Segoe UI', sans-serif;
+  font-weight: 600;
+  color: #3e3e3e;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .nav-link-custom {
+    font-size: 1rem;
+  }
+
+  h1, h2, h3 {
+    font-size: 1.25rem;
+  }
+}
+
+/* Soft border card effect */
+.card {
+  border-radius: 1rem;
+  border: none;
+}
+
+/* Form element improvements */
+input, select, textarea {
+  border-radius: 0.5rem !important;
+}
+
+/* Toast, modal, and alert overrides (optional) */
+.toast, .modal-content, .alert {
+  border-radius: 1rem !important;
 }

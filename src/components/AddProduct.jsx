@@ -1,5 +1,4 @@
-// src/components/AddProduct.jsx (Realtime DB: kategori seçmeli)
-
+// src/components/AddProduct.jsx
 import React, { useState, useEffect } from "react";
 import { Container, Card, Form, Button, Alert, Spinner, InputGroup } from "react-bootstrap";
 import { db } from "../firebase/config";
@@ -12,16 +11,18 @@ const AddProduct = () => {
   const [categories, setCategories] = useState([]);
   const [loadingCats, setLoadingCats] = useState(true);
   const [message, setMessage] = useState(null);
+  const [createdDate, setCreatedDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  });
 
-  // Load categories once
   useEffect(() => {
-    const loadCategories = async () => {
+    const loadCategoriesFromProducts = async () => {
       try {
-        const snap = await get(ref(db, "categories"));
-        if (snap.exists()) {
-          const list = Object.entries(snap.val()).map(([id, c]) => c.name);
-          setCategories(list);
-        }
+        const snap = await get(ref(db, "products"));
+        const data = snap.val() || {};
+        const cats = Array.from(new Set(Object.values(data).map((p) => p.category?.trim()).filter(Boolean)));
+        setCategories(cats);
       } catch (err) {
         console.error("Kategori yükleme hatası:", err);
         setMessage({ type: "danger", text: "Kategoriler yüklenemedi." });
@@ -29,24 +30,40 @@ const AddProduct = () => {
         setLoadingCats(false);
       }
     };
-    loadCategories();
+
+    loadCategoriesFromProducts();
   }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !unitPrice || !category) {
-      setMessage({ type: "danger", text: "Lütfen tüm alanları eksiksiz doldurun." });
+    setMessage(null);
+
+    if (!name.trim() || !unitPrice || isNaN(unitPrice) || !category) {
+      setMessage({ type: "danger", text: "Lütfen tüm alanları geçerli şekilde doldurun." });
       return;
     }
+
     try {
-      await push(ref(db, "products"), {
+      const timestamp = createdDate
+        ? new Date(createdDate).getTime()
+        : serverTimestamp();
+
+      const newRef = await push(ref(db, "products"), {
         name: name.trim(),
         unitPrice: parseFloat(unitPrice),
         category,
-        createdAt: serverTimestamp(),
+        createdAt: timestamp,
       });
-      setMessage({ type: "success", text: "Ürün başarıyla eklendi!" });
-      setName(""); setUnitPrice(""); setCategory("");
+
+      if (newRef.key) {
+        setMessage({ type: "success", text: "✔ Ürün başarıyla eklendi!" });
+        setName("");
+        setUnitPrice("");
+        setCategory("");
+        setCreatedDate(new Date().toISOString().split("T")[0]);
+      } else {
+        setMessage({ type: "danger", text: "⚠ Ürün eklenemedi. Lütfen tekrar deneyin." });
+      }
     } catch (err) {
       console.error("Ürün ekleme hatası:", err);
       setMessage({ type: "danger", text: "Ürün eklenirken hata oluştu." });
@@ -56,7 +73,7 @@ const AddProduct = () => {
   return (
     <Container fluid="sm">
       <Card className="mt-5 mx-auto shadow" style={{ maxWidth: "600px" }}>
-        <Card.Header className="bg-primary text-white text-center">
+        <Card.Header className="bg-primary text-white text-center rounded-top">
           <h4 className="mb-0">➕ Yeni Ürün Ekle</h4>
         </Card.Header>
         <Card.Body>
@@ -73,7 +90,7 @@ const AddProduct = () => {
                 <Form.Control
                   size="lg"
                   type="text"
-                  placeholder="Ör. Ekmek"
+                  placeholder="Ör. Kırmızı Kek"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
@@ -94,7 +111,7 @@ const AddProduct = () => {
                 </InputGroup>
               </Form.Group>
 
-              <Form.Group className="mb-4">
+              <Form.Group className="mb-3">
                 <Form.Label>Kategori</Form.Label>
                 <Form.Select
                   size="lg"
@@ -106,6 +123,16 @@ const AddProduct = () => {
                     <option key={i} value={cat}>{cat}</option>
                   ))}
                 </Form.Select>
+              </Form.Group>
+
+              <Form.Group className="mb-4">
+                <Form.Label>Oluşturulma Tarihi</Form.Label>
+                <Form.Control
+                  size="lg"
+                  type="date"
+                  value={createdDate}
+                  onChange={(e) => setCreatedDate(e.target.value)}
+                />
               </Form.Group>
 
               <div className="d-grid">

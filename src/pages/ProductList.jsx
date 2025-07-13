@@ -1,5 +1,3 @@
-// src/components/ProductList.jsx (Realtime Database uyumlu)
-
 import React, { useEffect, useState } from "react";
 import { db } from "../firebase/config";
 import { ref, get, remove } from "firebase/database";
@@ -28,16 +26,19 @@ const ProductList = ({ role }) => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, name) => {
     if (role !== "admin") {
       setMessage({ type: "warning", text: "🚫 Bu işlemi gerçekleştirmek için admin yetkisi gerekli." });
       return;
     }
 
+    const confirmDelete = window.confirm(`“${name}” adlı ürünü silmek istiyor musunuz?`);
+    if (!confirmDelete) return;
+
     try {
       await remove(ref(db, `products/${id}`));
       setProducts((prev) => prev.filter((p) => p.id !== id));
-      setMessage({ type: "success", text: "Ürün silindi." });
+      setMessage({ type: "success", text: `“${name}” ürünü silindi.` });
     } catch (error) {
       console.error("Silme hatası:", error);
       setMessage({ type: "danger", text: "Silme sırasında hata oluştu." });
@@ -66,13 +67,13 @@ const ProductList = ({ role }) => {
           {products.map((product) => (
             <tr key={product.id}>
               <td>{product.name}</td>
-              <td>₺{product.unitPrice}</td>
+              <td>₺{parseFloat(product.unitPrice).toFixed(2)}</td>
               <td>{product.category}</td>
               <td>
                 <Button
                   variant={role === "admin" ? "outline-danger" : "outline-secondary"}
                   size="sm"
-                  onClick={() => handleDelete(product.id)}
+                  onClick={() => handleDelete(product.id, product.name)}
                   disabled={role !== "admin"}
                 >
                   {role === "admin" ? "🗑 Sil" : "🚫 Yetki yok"}

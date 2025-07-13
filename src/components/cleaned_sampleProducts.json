@@ -1,0 +1,327 @@
+[
+  {
+    "name": "ATTIMO HIBISKUS BASE 1 KG",
+    "category": "PÜRELER",
+    "unitPrice": 773.85
+  },
+  {
+    "name": "BEYAZ PİPET(İNCE)",
+    "category": "SERVİS ÜRÜN",
+    "unitPrice": 1559.25
+  },
+  {
+    "name": "BITTER GREEN(3 ADET)",
+    "category": "KEKLER",
+    "unitPrice": 635.25
+  },
+  {
+    "name": "BROKEN BROWNIE",
+    "category": "KEKLER",
+    "unitPrice": 840.84
+  },
+  {
+    "name": "BROWNIE",
+    "category": "BROWNIE-COOKIE",
+    "unitPrice": 56.16
+  },
+  {
+    "name": "BROWNİE BARDAK",
+    "category": "DEMİRBAŞ",
+    "unitPrice": 1106.7
+  },
+  {
+    "name": "BU DAHA İYİ",
+    "category": "KEKLER",
+    "unitPrice": 297.99
+  },
+  {
+    "name": "BU DAHA İYİ SOS",
+    "category": "KREMALAR",
+    "unitPrice": 1386.0
+  },
+  {
+    "name": "COOKIE",
+    "category": "BROWNIE-COOKIE",
+    "unitPrice": 876.14
+  },
+  {
+    "name": "CRAFT ÇANTA",
+    "category": "PAKETLEME ÜRÜNLERİ",
+    "unitPrice": 773.85
+  },
+  {
+    "name": "CREAMPUFF",
+    "category": "KEKLER",
+    "unitPrice": 297.99
+  },
+  {
+    "name": "CREAMPUFF KREMA",
+    "category": "KREMALAR",
+    "unitPrice": 462.0
+  },
+  {
+    "name": "DONDURMA 1 kg",
+    "category": "DONDURMALAR",
+    "unitPrice": 294.52
+  },
+  {
+    "name": "DÖKÜM DEMİR KARE TAVA",
+    "category": "DEMİRBAŞ",
+    "unitPrice": 697.63
+  },
+  {
+    "name": "ESPRESSO",
+    "category": "KG KAHVELER",
+    "unitPrice": 745.0
+  },
+  {
+    "name": "FİLE BADEM",
+    "category": "KURUYEMİŞ",
+    "unitPrice": 2281.12
+  },
+  {
+    "name": "FİLTRE KAHVE 1kg",
+    "category": "KAHVELER",
+    "unitPrice": 852.39
+  },
+  {
+    "name": "FO ANANAS ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 254.1
+  },
+  {
+    "name": "FO COOL LIME ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 77.37
+  },
+  {
+    "name": "FO KAVUN PÜRESİ 1000GR",
+    "category": "PÜRELER",
+    "unitPrice": 773.85
+  },
+  {
+    "name": "FO ORMAN MEYVESİ PÜRESİ 1000 GR",
+    "category": "PÜRELER",
+    "unitPrice": 773.85
+  },
+  {
+    "name": "FO YABAN MERSİNİ PÜRESİ 1000GR",
+    "category": "PÜRELER",
+    "unitPrice": 773.85
+  },
+  {
+    "name": "GARSON KATLAMA SERVİS PEÇETE",
+    "category": "SERVİS ÜRÜN",
+    "unitPrice": 1617.0
+  },
+  {
+    "name": "GLOW KREMA",
+    "category": "KREMALAR",
+    "unitPrice": 1492.26
+  },
+  {
+    "name": "GLOWY LOVE KAĞIDI",
+    "category": "SERVİS ÜRÜN",
+    "unitPrice": 62.87
+  },
+  {
+    "name": "GOLD ÇİKOLATA",
+    "category": "DİĞER",
+    "unitPrice": 866.25
+  },
+  {
+    "name": "ISLAK MENDİL",
+    "category": "SERVİS ÜRÜN",
+    "unitPrice": 774.6
+  },
+  {
+    "name": "KIRIK FINDIK",
+    "category": "KURUYEMİŞ",
+    "unitPrice": 0.0
+  },
+  {
+    "name": "KIRIK FISTIK",
+    "category": "KURUYEMİŞ",
+    "unitPrice": 773.85
+  },
+  {
+    "name": "KIRMIZI KEK(3 ADET)",
+    "category": "KEKLER",
+    "unitPrice": 332.64
+  },
+  {
+    "name": "KREP",
+    "category": "KEKLER",
+    "unitPrice": 419.26
+  },
+  {
+    "name": "KRUVASAN",
+    "category": "DİĞER",
+    "unitPrice": 33.86
+  },
+  {
+    "name": "LİMONLU KREMA",
+    "category": "KREMALAR",
+    "unitPrice": 77.37
+  },
+  {
+    "name": "LOTUS BİSCOFF CREAMY",
+    "category": "KREMALAR",
+    "unitPrice": 8.42
+  },
+  {
+    "name": "LOTUS KREMA",
+    "category": "KREMALAR",
+    "unitPrice": 75.07
+  },
+  {
+    "name": "MATCHA 250 GR",
+    "category": "PAKET KAHVELER",
+    "unitPrice": 1559.25
+  },
+  {
+    "name": "MILK CHOCOLATE CALLEBAUT",
+    "category": "CALLEBAUT",
+    "unitPrice": 125.16
+  },
+  {
+    "name": "MONİN BLUE CURACAO ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 184.8
+  },
+  {
+    "name": "MONİN CARAAMEL SOS 2,46 KG",
+    "category": "SOSLAR",
+    "unitPrice": 75.46
+  },
+  {
+    "name": "MONİN CHOCOLATE COOKIE ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 42.15
+  },
+  {
+    "name": "MONİN CREME BRULEE ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 323.4
+  },
+  {
+    "name": "MONİN ÇİLEK ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 450.0
+  },
+  {
+    "name": "MONİN GREYFURT ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 154.48
+  },
+  {
+    "name": "MONİN LAVANTA ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 643.88
+  },
+  {
+    "name": "MONİN MANGO PÜRESİ 1000 GR",
+    "category": "PÜRELER",
+    "unitPrice": 1559.25
+  },
+  {
+    "name": "MONİN PASSION FRUIT 1000 GR",
+    "category": "PÜRELER",
+    "unitPrice": 1559.25
+  },
+  {
+    "name": "MONİN RUBY GREYFURT PÜRESİ 1000 GR",
+    "category": "PÜRELER",
+    "unitPrice": 1559.25
+  },
+  {
+    "name": "MONİN STRAWBERRY PÜRESİ 1000 GR",
+    "category": "PÜRELER",
+    "unitPrice": 1559.85
+  },
+  {
+    "name": "MONİN VANİLYA ŞURUBU 70 CL",
+    "category": "ŞURUPLAR",
+    "unitPrice": 756.52
+  },
+  {
+    "name": "MONİN WHITE CHOCOLATE SOS 2,46 KG",
+    "category": "SOSLAR",
+    "unitPrice": 855.99
+  },
+  {
+    "name": "MONİN YUZU PÜRESİ 1000 GR",
+    "category": "PÜRELER",
+    "unitPrice": 773.85
+  },
+  {
+    "name": "MOR KEK(3 ADET)",
+    "category": "KEKLER",
+    "unitPrice": 297.99
+  },
+  {
+    "name": "PANCAKE HARCI(4.3 KG)",
+    "category": "KREMALAR",
+    "unitPrice": 136.25
+  },
+  {
+    "name": "PATE A COUX(5 ADET)",
+    "category": "KEKLER",
+    "unitPrice": 554.4
+  },
+  {
+    "name": "ROLL KRUVASAN",
+    "category": "DİĞER",
+    "unitPrice": 528.73
+  },
+  {
+    "name": "SAN SEBASTIAN",
+    "category": "CHEESECAKE",
+    "unitPrice": 64.84
+  },
+  {
+    "name": "SICAK İÇECEK BARDAĞI",
+    "category": "BARDAKLAR",
+    "unitPrice": 450.45
+  },
+  {
+    "name": "SİYAH KEK(3 ADET)",
+    "category": "KEKLER",
+    "unitPrice": 126.96
+  },
+  {
+    "name": "SOĞUK İÇECEK BARDAĞI",
+    "category": "BARDAKLAR",
+    "unitPrice": 129.93
+  },
+  {
+    "name": "ŞEFFAF PİPET(LOGOLU KALIN)",
+    "category": "SERVİS ÜRÜN",
+    "unitPrice": 31.05
+  },
+  {
+    "name": "TOPFİL YABAN MERSİNİ DOLGUSU",
+    "category": "KREMALAR",
+    "unitPrice": 1486.48
+  },
+  {
+    "name": "TÜRK KAHVESİ 250 GR",
+    "category": "GELENEKSEL KAHVELER",
+    "unitPrice": 1137.67
+  },
+  {
+    "name": "WAFFLE HARCI(4.3 KG)",
+    "category": "KREMALAR",
+    "unitPrice": 329.39
+  },
+  {
+    "name": "WHITE CHOCOLATE CALLEBAUT",
+    "category": "CALLEBAUT",
+    "unitPrice": 190.57
+  },
+  {
+    "name": "YEŞİL KEK(3 ADET)",
+    "category": "KEKLER",
+    "unitPrice": 1.925
+  }
+]

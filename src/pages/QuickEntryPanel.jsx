@@ -1,7 +1,5 @@
-// src/components/QuickEntryPanel.jsx (Realtime Database uyumlu)
-
 import React, { useState, useEffect } from "react";
-import { db } from "../firebase/config";
+import { db, auth } from "../firebase/config";
 import { ref, get, push } from "firebase/database";
 import { Form, Button, Alert } from "react-bootstrap";
 import DatePicker from "react-datepicker";
@@ -39,6 +37,13 @@ const QuickEntryPanel = () => {
     ? parseFloat(selectedProduct.unitPrice) * Number(quantity || 0)
     : 0;
 
+  const formatDateKey = (dateObj) => {
+    const day = String(dateObj.getDate()).padStart(2, "0");
+    const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const year = dateObj.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -47,12 +52,29 @@ const QuickEntryPanel = () => {
       return;
     }
 
+    const entryDate = date.toISOString();
+    const dateKey = formatDateKey(date);
+    const user = auth.currentUser;
+
+    const productData = {
+      name: selectedProduct.name,
+      quantity: Number(quantity),
+      unitPrice: parseFloat(selectedProduct.unitPrice),
+      totalCost,
+    };
+
+    const entryData = {
+      products: [productData],
+      date: entryDate,
+      approved: false,
+      userEmail: user?.email || "bilinmiyor",
+    };
+
     try {
+      await push(ref(db, `dailyInvoices/${dateKey}`), entryData);
       await push(ref(db, "entries"), {
-        productId: selectedProductId,
-        quantity: Number(quantity),
-        totalCost,
-        date: date.toISOString(),
+        ...entryData,
+        adminApproved: false,
       });
 
       setMessage({
@@ -73,7 +95,7 @@ const QuickEntryPanel = () => {
 
   return (
     <div className="container mt-4">
-      <h4>⚡ Hızlı Ürün Girişi</h4>
+      <h4>Tarihe Göre Eksik Ürün Girişi</h4>
       {message && <Alert variant={message.type}>{message.text}</Alert>}
 
       <Form
@@ -112,7 +134,7 @@ const QuickEntryPanel = () => {
             selected={date}
             onChange={(val) => setDate(val)}
             className="form-control"
-            dateFormat="dd/MM/yyyy"
+            dateFormat="dd-MM-yyyy"
           />
         </Form.Group>
 

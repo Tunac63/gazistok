@@ -1,10 +1,17 @@
-// src/components/Register.jsx (Realtime Database uyumlu)
+// src/components/Register.jsx (premium, modern, uyumlu)
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../firebase/config";
-import { ref, set, get, child } from "firebase/database";
-import { Form, Button, Container, Alert } from "react-bootstrap";
+import { ref, get, set } from "firebase/database";
+import {
+  Form,
+  Button,
+  Container,
+  Alert,
+  Card,
+  Spinner,
+} from "react-bootstrap";
 import { useNavigate, Link } from "react-router-dom";
 
 const Register = () => {
@@ -13,107 +20,144 @@ const Register = () => {
   const [sifreTekrar, setSifreTekrar] = useState("");
   const [mesaj, setMesaj] = useState(null);
   const [loading, setLoading] = useState(false);
-
+  const timeoutRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    return () => clearTimeout(timeoutRef.current);
+  }, []);
 
   const handleRegister = async (e) => {
     e.preventDefault();
 
-    if (sifre !== sifreTekrar) {
-      setMesaj({ text: "Şifreler eşleşmiyor.", type: "danger" });
+
+    // Sadece gazi@ ile başlayan ve .com ile biten e-posta adreslerine izin ver
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail.startsWith("gazi@")) {
+      setMesaj({ text: "Kayıt için gazi@ ile başlayan bir e-posta adresi gereklidir.", type: "danger" });
+      return;
+    }
+    if (!trimmedEmail.endsWith(".com")) {
+      setMesaj({ text: "Kayıt için e-posta adresi .com ile bitmelidir.", type: "danger" });
       return;
     }
 
+    if (sifre !== sifreTekrar) {
+      setMesaj({ text: "❗ Şifreler eşleşmiyor.", type: "danger" });
+      return;
+    }
+
+    setLoading(true);
+    setMesaj(null);
+
     try {
-      setLoading(true);
-
-      // Realtime DB'den tüm kullanıcıları kontrol et
-      const userRef = ref(db);
-      const snapshot = await get(child(userRef, "users"));
-      const isFirstUser = !snapshot.exists();
-
-      // Firebase Authentication ile kullanıcı oluştur
-      const userCredential = await createUserWithEmailAndPassword(auth, email, sifre);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        sifre
+      );
       const user = userCredential.user;
 
-      // Kullanıcıyı Realtime DB'ye kaydet
-      await set(ref(db, `users/${user.uid}`), {
+      const userRef = ref(db, `users/${user.uid}`);
+      const snapshot = await get(ref(db, "users"));
+      const isFirstUser = !snapshot.exists();
+
+      await set(userRef, {
         email: user.email,
-        role: isFirstUser ? "admin" : "user"
+        role: isFirstUser ? "admin" : "user",
+        createdAt: Date.now(),
       });
 
       setMesaj({
-        text: "Kayıt başarılı! Giriş ekranına yönlendiriliyorsunuz...",
-        type: "success"
+        text: "✔ Kayıt başarılı! Giriş ekranına yönlendiriliyorsunuz...",
+        type: "success",
       });
 
-      setTimeout(() => navigate("/login"), 2000);
+      timeoutRef.current = setTimeout(() => navigate("/login"), 2000);
     } catch (err) {
-      console.error("Kayıt hatası:", err);
-      let hataMesaji = "Bir hata oluştu. Lütfen tekrar deneyin.";
+      console.error("Kayıt hatası:", err.code, err.message);
+      let hataMsg = "Bir hata oluştu. Lütfen tekrar deneyin.";
 
       if (err.code === "auth/email-already-in-use") {
-        hataMesaji = "Bu e-posta zaten kayıtlı. Lütfen giriş yapın.";
+        hataMsg = "🚫 Bu e-posta zaten kayıtlı. Giriş yapmayı deneyin.";
       } else if (err.code === "auth/invalid-email") {
-        hataMesaji = "Geçersiz e-posta formatı.";
+        hataMsg = "📧 Geçersiz e-posta adresi.";
       } else if (err.code === "auth/weak-password") {
-        hataMesaji = "Şifre en az 6 karakter olmalı.";
+        hataMsg = "🔐 Şifre en az 6 karakter olmalıdır.";
+      } else if (err.message.includes("Permission denied")) {
+        hataMsg =
+          "⚠ Firebase Realtime Database erişimi reddedildi. Kuralları kontrol edin.";
       }
 
-      setMesaj({ text: hataMesaji, type: "danger" });
+      setMesaj({ text: hataMsg, type: "danger" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container style={{ maxWidth: "400px", marginTop: "4rem" }}>
-      <h3 className="mb-4">Kayıt Ol</h3>
+    <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: "100vh" }}>
+      <Card className="p-4 shadow-lg rounded-4" style={{ width: "100%", maxWidth: "420px" }}>
+        <h3 className="mb-4 text-center fw-bold text-success">📝 Kayıt Ol</h3>
 
-      {mesaj && <Alert variant={mesaj.type}>{mesaj.text}</Alert>}
+        {mesaj && <Alert variant={mesaj.type}>{mesaj.text}</Alert>}
 
-      <Form onSubmit={handleRegister}>
-        <Form.Group className="mb-3">
-          <Form.Label>E-posta</Form.Label>
-          <Form.Control
-            type="email"
-            placeholder="mail@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </Form.Group>
+        <Form onSubmit={handleRegister} noValidate>
+          <Form.Group className="mb-3" controlId="formEmail">
+            <Form.Label className="fw-semibold">📧 E-posta</Form.Label>
+            <Form.Control
+              type="email"
+              placeholder="mail@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="rounded-3"
+            />
+          </Form.Group>
 
-        <Form.Group className="mb-3">
-          <Form.Label>Şifre</Form.Label>
-          <Form.Control
-            type="password"
-            placeholder="••••••••"
-            value={sifre}
-            onChange={(e) => setSifre(e.target.value)}
-            required
-          />
-        </Form.Group>
+          <Form.Group className="mb-3" controlId="formSifre">
+            <Form.Label className="fw-semibold">🔐 Şifre</Form.Label>
+            <Form.Control
+              type="password"
+              placeholder="••••••••"
+              value={sifre}
+              onChange={(e) => setSifre(e.target.value)}
+              minLength={6}
+              required
+              className="rounded-3"
+            />
+          </Form.Group>
 
-        <Form.Group className="mb-3">
-          <Form.Label>Şifre Tekrar</Form.Label>
-          <Form.Control
-            type="password"
-            placeholder="••••••••"
-            value={sifreTekrar}
-            onChange={(e) => setSifreTekrar(e.target.value)}
-            required
-          />
-        </Form.Group>
+          <Form.Group className="mb-3" controlId="formSifreTekrar">
+            <Form.Label className="fw-semibold">🔁 Şifre Tekrar</Form.Label>
+            <Form.Control
+              type="password"
+              placeholder="••••••••"
+              value={sifreTekrar}
+              onChange={(e) => setSifreTekrar(e.target.value)}
+              minLength={6}
+              required
+              className="rounded-3"
+            />
+          </Form.Group>
 
-        <Button variant="success" type="submit" className="w-100" disabled={loading}>
-          {loading ? "Kayıt Olunuyor..." : "Kayıt Ol"}
-        </Button>
-      </Form>
+          <Button
+            variant="success"
+            type="submit"
+            className="w-100 rounded-3 fw-bold"
+            disabled={loading}
+          >
+            {loading ? <Spinner size="sm" animation="border" /> : "Kayıt Ol"}
+          </Button>
+        </Form>
 
-      <p className="mt-3 text-center">
-        Zaten hesabınız var mı? <Link to="/login">Giriş yapın</Link>
-      </p>
+        <p className="mt-4 text-center text-muted">
+          Zaten hesabınız var mı?{" "}
+          <Link to="/login" className="fw-semibold text-decoration-none">
+            Giriş yapın
+          </Link>
+        </p>
+      </Card>
     </Container>
   );
 };
