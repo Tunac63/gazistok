@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useAuthState } from "react-firebase-hooks/auth";
 import { db, auth } from "../firebase/config";
 import { ref, get, set } from "firebase/database";
 import { useNavigate } from "react-router-dom";
@@ -8,8 +9,12 @@ const PasswordGate = ({ children }) => {
   const [valid, setValid] = useState(false);
   const [status, setStatus] = useState("checking");
   const navigate = useNavigate();
+  const [user, loading] = useAuthState(auth);
 
   useEffect(() => {
+    if (loading) return; // Auth state yüklenmeden kontrol yapma
+    // Her sayfa yüklemesinde şifreyi tekrar sormak için localStorage'dan sil
+    localStorage.removeItem("entry_code");
     const check = async () => {
       const user = auth.currentUser;
       if (!user) return navigate("/login");
@@ -23,7 +28,7 @@ const PasswordGate = ({ children }) => {
       setStatus("ready");
     };
     check();
-  }, []);
+  }, [user, loading, navigate]);
 
   const handleSubmit = async () => {
     const user = auth.currentUser;
@@ -48,15 +53,14 @@ const PasswordGate = ({ children }) => {
     alert("🔑 Şifre talebiniz admin'e gönderildi.");
   };
 
-  if (valid) return children;
-
-  if (status === "checking") {
+  if (loading || status === "checking") {
     return (
       <div className="text-center mt-5">
         <p>🔐 Şifre kontrol ediliyor...</p>
       </div>
     );
   }
+  if (valid) return children;
 
   return (
     <div className="d-flex flex-column align-items-center mt-5">

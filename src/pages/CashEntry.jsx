@@ -668,10 +668,14 @@ export default function CashEntry() {
                     value={prevValue}
                     onChange={(e) => setPrevValue(e.target.value)}
                     disabled={!allowPrev}
-                    style={!allowPrev ? { background: "#e9ecef" } : {}}
+                    style={{
+                      ...((!allowPrev) ? { background: "#e9ecef" } : {}),
+                      minHeight: "48px",
+                      fontSize: "16px"
+                    }}
                   />
-                  <InputGroup.Text>₺</InputGroup.Text>
-                  {!allowPrev && <InputGroup.Text>🔒</InputGroup.Text>}
+                  <InputGroup.Text style={{ minHeight: "48px" }}>₺</InputGroup.Text>
+                  {!allowPrev && <InputGroup.Text style={{ minHeight: "48px" }}>🔒</InputGroup.Text>}
                 </InputGroup>
                 {allowPrev && (
                   <Button
@@ -694,8 +698,9 @@ export default function CashEntry() {
                     type="number"
                     value={cashIn}
                     onChange={(e) => setCashIn(e.target.value)}
+                    style={{ minHeight: "48px", fontSize: "16px" }}
                   />
-                  <InputGroup.Text>₺</InputGroup.Text>
+                  <InputGroup.Text style={{ minHeight: "48px" }}>₺</InputGroup.Text>
                 </InputGroup>
               </Col>
 
@@ -706,8 +711,9 @@ export default function CashEntry() {
                     type="number"
                     value={visaIn}
                     onChange={(e) => setVisaIn(e.target.value)}
+                    style={{ minHeight: "48px", fontSize: "16px" }}
                   />
-                  <InputGroup.Text>₺</InputGroup.Text>
+                  <InputGroup.Text style={{ minHeight: "48px" }}>₺</InputGroup.Text>
                 </InputGroup>
               </Col>
 
@@ -719,6 +725,7 @@ export default function CashEntry() {
                     value={`₺${fmt(
                       (parseFloat(cashIn) || 0) + (parseFloat(visaIn) || 0)
                     )}`}
+                    style={{ minHeight: "48px", fontSize: "16px", backgroundColor: "#f8f9fa" }}
                   />
                 </InputGroup>
               </Col>
@@ -730,6 +737,7 @@ export default function CashEntry() {
                     type="number"
                     value={adisyonCount}
                     onChange={(e) => setAdisyonCount(e.target.value)}
+                    style={{ minHeight: "48px", fontSize: "16px" }}
                   />
                 </InputGroup>
               </Col>

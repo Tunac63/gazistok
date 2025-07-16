@@ -18,31 +18,19 @@ export const AdminRoute = ({ user, role, children }) => {
   if (role === null || role === undefined) {
     // Rol bilgisi henüz yüklenmemişse bekle
     return (
-      <div style={{ padding: "2rem", textAlign: "center" }}>
-        🔐 Admin kontrolü yapılıyor...
+      <div style={{ padding: "2rem", textAlign: "center", color: '#555', fontSize: 18, fontWeight: 500, letterSpacing: 0.2 }}>
+        <span style={{fontSize:28, marginBottom:8, display:'inline-block'}}>�</span><br/>
+        Admin yetkisi kontrol ediliyor...
       </div>
     );
   }
 
   if (role !== "admin") {
-    // Bildirim göster, sonra yönlendir
+    // Sadece sade bir uyarı göster, yönlendirme veya kırmızı kutu yok
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <div style={{
-          display: 'inline-block',
-          background: '#dc3545',
-          color: '#fff',
-          borderRadius: 10,
-          padding: '18px 32px',
-          fontSize: 20,
-          fontWeight: 600,
-          marginBottom: 16
-        }}>
-          Yetkiniz yoktur
-        </div>
-        <br />
-        <span style={{ color: '#888', fontSize: 16 }}>Ana sayfaya yönlendiriliyorsunuz...</span>
-        {setTimeout(() => window.location.replace('/'), 1500) && null}
+      <div style={{ padding: '2rem', textAlign: 'center', color: '#888', fontSize: 18 }}>
+        <span style={{fontSize:24}}>🚫</span><br/>
+        Bu sayfaya erişim yetkiniz yok.
       </div>
     );
   }
@@ -58,17 +46,19 @@ export const RoleRoute = ({ user, role, allowedRoles, children }) => {
 
   if (role === null || role === undefined) {
     return (
-      <Container style={{ padding: "2rem", textAlign: "center" }}>
+      <div style={{ padding: "2rem", textAlign: "center", color: '#555', fontSize: 18, fontWeight: 500, letterSpacing: 0.2 }}>
+        <span style={{fontSize:28, marginBottom:8, display:'inline-block'}}>🔄</span><br/>
         Yükleniyor...
-      </Container>
+      </div>
     );
   }
 
   if (!allowedRoles.includes(role)) {
     return (
-      <Container className="p-4">
-        <Alert variant="warning">🚫 Bu sayfaya erişim yetkiniz yok.</Alert>
-      </Container>
+      <div style={{ padding: '2rem', textAlign: 'center', color: '#888', fontSize: 18 }}>
+        <span style={{fontSize:24}}>🚫</span><br/>
+        Bu sayfaya erişim yetkiniz yok.
+      </div>
     );
   }
 

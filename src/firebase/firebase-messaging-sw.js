@@ -6,7 +6,7 @@ firebase.initializeApp({
   apiKey: "AIzaSyAKfvYLMvgvjEm70cTsv0hGu1Ut_2fZIU8",
   authDomain: "gazistok.firebaseapp.com",
   projectId: "gazistok",
-  storageBucket: "gazistok.appspot.com",
+  storageBucket: "gazistok.firebasestorage.app",
   messagingSenderId: "1003165730366",
   appId: "1:1003165730366:web:8d2314c04ddb69bcd7336f"
 });

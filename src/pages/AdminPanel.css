@@ -1,0 +1,95 @@
+:root {
+  --admin-bg: #f7f8fa;
+  --admin-card-bg: #fff;
+  --admin-card-radius: 18px;
+  --admin-card-shadow: 0 2px 16px 0 rgba(60,72,88,0.08);
+  --admin-title: #2d3748;
+  --admin-table-header: #e9ecef;
+  --admin-btn: #2563eb;
+  --admin-btn-hover: #1d4ed8;
+  --admin-btn-danger: #e11d48;
+  --admin-btn-danger-hover: #be123c;
+}
+
+.admin-panel-container {
+  background: var(--admin-bg);
+  min-height: 100vh;
+}
+
+.admin-title {
+  color: var(--admin-title);
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 2rem;
+}
+
+.admin-card {
+  background: var(--admin-card-bg);
+  border-radius: var(--admin-card-radius);
+  box-shadow: var(--admin-card-shadow);
+  border: none;
+}
+
+.admin-card-header {
+  background: transparent;
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem 0.5rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.admin-card-title {
+  color: #374151;
+  font-size: 1.1rem;
+}
+
+.admin-add-btn {
+  background: var(--admin-btn);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 0.4rem 1.1rem;
+  transition: background 0.2s;
+}
+.admin-add-btn:hover {
+  background: var(--admin-btn-hover);
+}
+
+.admin-table {
+  background: transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 1rem;
+}
+.admin-table th {
+  background: var(--admin-table-header);
+  color: #374151;
+  font-weight: 600;
+  border: none;
+}
+.admin-table td {
+  background: #fff;
+  border: none;
+  vertical-align: middle;
+}
+
+@media (max-width: 767px) {
+  .admin-title {
+    font-size: 1.3rem;
+  }
+  .admin-card-header {
+    font-size: 1rem;
+    padding: 0.7rem 1rem 0.4rem 1rem;
+  }
+  .admin-add-btn {
+    padding: 0.3rem 0.8rem;
+    font-size: 0.95rem;
+  }
+  .admin-table {
+    font-size: 0.95rem;
+  }
+}

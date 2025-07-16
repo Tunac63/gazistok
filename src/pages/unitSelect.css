@@ -1,0 +1,36 @@
+/* Birim select kutusu için özel stil */
+.unit-select {
+  text-transform: uppercase !important;
+  font-weight: bold !important;
+  letter-spacing: 0.5px;
+  background: #f8fafd;
+  border: 2px solid #1976d2;
+  color: #222;
+  border-radius: 8px;
+  min-width: 90px;
+  min-height: 36px;
+  box-shadow: 0 2px 8px #1976d21a;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+.unit-select:focus {
+  border: 2px solid #0d47a1;
+  box-shadow: 0 4px 16px #1976d233;
+}
+.unit-select optgroup[label] {
+  color: #1976d2;
+  font-weight: bold;
+  font-size: 1em;
+  text-transform: uppercase;
+}
+.unit-select option {
+  text-transform: uppercase;
+  font-weight: bold;
+  padding: 6px 0;
+}
+
+@media (max-width: 600px) {
+  .unit-select {
+    min-width: 100%;
+    font-size: 1.1em;
+  }
+}

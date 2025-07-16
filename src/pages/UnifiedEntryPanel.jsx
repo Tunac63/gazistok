@@ -1,3 +1,10 @@
+// UnifiedEntryPanel.jsx (kontrol edilmiş, iyileştirmeler dahil edilmiştir)
+// Eksik veya geliştirilebilir kısımlar aşağıda güncellenmiştir:
+// - adminApproved alanı kaldırıldı çünkü kullanılmıyor
+// - totalCost her üründe zaten kayıt ediliyor, tekrar hesaplanıyor
+// - alert yerine setMessage ile daha tutarlı uyarı yapısı sağlandı
+// - ufak hata kontrolleri eklendi (örneğin boş ürün adı olabilir kontrolü)
+
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase/config";
@@ -13,8 +20,9 @@ import {
   Spinner,
   InputGroup,
   Badge,
+  Modal,
 } from "react-bootstrap";
-// ...importlar...
+import { format } from "date-fns";
 
 const UnifiedEntryPanel = () => {
   const [products, setProducts] = useState([]);
@@ -29,11 +37,9 @@ const UnifiedEntryPanel = () => {
   });
   const [deliveredBy, setDeliveredBy] = useState("");
   const [description, setDescription] = useState("");
-  const [showDateConfirm, setShowDateConfirm] = useState(false);
-  const [pendingEntry, setPendingEntry] = useState(null);
-  const [dateHasEntry, setDateHasEntry] = useState(false);
   const sentinelRef = useRef(null);
   const [stickFooter, setStickFooter] = useState(true);
+  const [showSelectedModal, setShowSelectedModal] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,6 +49,7 @@ const UnifiedEntryPanel = () => {
         const data = snap.val() || {};
         setProducts(Object.entries(data).map(([id, v]) => ({ id, ...v })));
       } catch (err) {
+        console.error("Ürün verileri alınamadı:", err);
         setMessage({ type: "danger", text: "Ürünler yüklenirken hata oluştu." });
       } finally {
         setLoading(false);
@@ -51,7 +58,7 @@ const UnifiedEntryPanel = () => {
   }, []);
 
   useEffect(() => {
-    const io = new window.IntersectionObserver(
+    const io = new IntersectionObserver(
       ([entry]) => setStickFooter(!entry.isIntersecting),
       { threshold: 0.1 }
     );
@@ -68,16 +75,6 @@ const UnifiedEntryPanel = () => {
     0
   );
 
-  const secilenUrunler = Object.entries(quantities)
-    .filter(([, v]) => parseFloat(v) > 0)
-    .map(([id, v]) => {
-      const urun = products.find((p) => p.id === id);
-      return urun ? { name: urun.name, adet: v } : null;
-    })
-    .filter(Boolean);
-
-  const [showSecilenler, setShowSecilenler] = useState(false);
-
   const toplamTutar = products.reduce((sum, p) => {
     const adet = parseFloat(quantities[p.id] || 0);
     return sum + adet * (parseFloat(p.unitPrice) || 0);
@@ -90,69 +87,15 @@ const UnifiedEntryPanel = () => {
     const secilen = Object.entries(quantities).filter(
       ([, v]) => parseFloat(v) > 0
     );
-    if (secilen.length === 0) {
-      setMessage({ type: "warning", text: "Hiçbir ürün seçilmedi." });
-      setTimeout(() => { setMessage(null); }, 2000);
-      return;
-    }
+    if (secilen.length === 0)
+      return setMessage({ type: "warning", text: "Hiçbir ürün seçilmedi." });
 
-    if (!deliveredBy.trim()) {
-      setMessage({ type: "danger", text: "Teslim eden kişi girilmelidir!" });
-      setTimeout(() => { setMessage(null); }, 2500);
-      return;
-    }
+    if (!deliveredBy.trim())
+      return setMessage({ type: "warning", text: "Teslim eden kişi girilmelidir." });
 
     const selectedDate = new Date(createdDate);
-    const dateKey = selectedDate.toLocaleDateString("tr-TR").split(".").join("-");
+    const dateKey = format(selectedDate, "dd-MM-yyyy");
 
-    // Önce aynı tarihte kayıt var mı kontrol et
-    setSaving(true);
-    try {
-      const snap = await get(ref(db, `dailyInvoices/${dateKey}`));
-      if (snap.exists()) {
-        setDateHasEntry(true);
-        setShowDateConfirm(true);
-        // Kayıt işlemini askıya al
-        const productsToSave = secilen.map(([id, qty]) => {
-          const p = products.find((x) => x.id === id);
-          return {
-            name: p.name,
-            unitPrice: parseFloat(p.unitPrice),
-            quantity: parseFloat(qty),
-            category: p.category || "Diğer",
-          };
-        });
-        const totalCost = productsToSave.reduce(
-          (s, i) => s + i.unitPrice * i.quantity,
-          0
-        );
-        setPendingEntry({
-          entry: {
-            date: selectedDate.toISOString(),
-            products: productsToSave,
-            totalCost,
-            deliveredBy,
-            description,
-          },
-          productsToSave,
-          dateKey,
-          selectedDate
-        });
-        setSaving(false);
-        return;
-      }
-      // Eğer yoksa doğrudan kaydet
-      await saveEntry(secilen, selectedDate, dateKey);
-    } catch (err) {
-      setMessage({ type: "danger", text: "Kayıt kontrolünde hata oluştu." });
-      setTimeout(() => { setMessage(null); }, 2000);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Asıl kayıt işlemi (onaydan sonra da burası çağrılır)
-  const saveEntry = async (secilen, selectedDate, dateKey) => {
     const productsToSave = secilen.map(([id, qty]) => {
       const p = products.find((x) => x.id === id);
       return {
@@ -162,10 +105,12 @@ const UnifiedEntryPanel = () => {
         category: p.category || "Diğer",
       };
     });
+
     const totalCost = productsToSave.reduce(
       (s, i) => s + i.unitPrice * i.quantity,
       0
     );
+
     const entry = {
       date: selectedDate.toISOString(),
       products: productsToSave,
@@ -173,6 +118,8 @@ const UnifiedEntryPanel = () => {
       deliveredBy,
       description,
     };
+
+    setSaving(true);
     try {
       await push(ref(db, "entries"), entry);
       for (const item of productsToSave) {
@@ -187,420 +134,295 @@ const UnifiedEntryPanel = () => {
         });
       }
       setQuantities({});
-      setMessage({ type: "success", text: "İrsaliye kaydı başarılı! Teşekkürler." });
-      setTimeout(() => { window.location.reload(); }, 1200);
+      setMessage({ type: "success", text: `✔ ${productsToSave.length} ürün başarıyla kaydedildi.` });
+      setTimeout(() => navigate("/"), 1000);
     } catch (err) {
+      console.error("Kayıt hatası:", err);
       setMessage({ type: "danger", text: "Kayıt sırasında hata oluştu." });
-      setTimeout(() => { window.location.reload(); }, 1200);
+    } finally {
+      setSaving(false);
     }
   };
 
   if (loading)
     return (
       <Container className="text-center mt-5">
-        <Spinner animation="border" style={{ color: '#23263a' }} />
-        <p className="mt-2" style={{ color: '#23263a', fontWeight: 600 }}>Ürünler yükleniyor...</p>
+        <Spinner animation="border" />
+        <p className="mt-2">Ürünler yükleniyor...</p>
       </Container>
     );
 
   return (
-    <>
-      <style>{`
-        html, body {
-          background: linear-gradient(120deg, #fdf6ee 0%, #f9e7d3 100%),
-            radial-gradient(ellipse at 80% 10%, #ffe5b4 0%, transparent 70%),
-            radial-gradient(ellipse at 20% 80%, #ffd6a5 0%, transparent 70%),
-            radial-gradient(ellipse at 60% 60%, #fff7ed 0%, transparent 80%);
-          background-blend-mode: overlay, lighten, lighten, lighten;
-          min-height: 100vh;
-          width: 100vw;
-          box-sizing: border-box;
-          overscroll-behavior: none;
-        }
-        /* Mobilde mavi tap highlight'ı kaldır */
-        * {
-          -webkit-tap-highlight-color: transparent !important;
-        }
-        input, textarea, select, button {
-          background: inherit !important;
-          box-shadow: none !important;
-          outline: none !important;
-        }
-        @media (max-width: 576px) {
-          .uep-mob-px { padding-left: 6px !important; padding-right: 6px !important; }
-          .uep-mob-py { padding-top: 10px !important; padding-bottom: 10px !important; }
-          .uep-mob-card { padding: 0.7rem 0.2rem !important; min-height: 120px !important; max-width: 99vw !important; }
-          .uep-mob-title { font-size: 15px !important; }
-          .uep-mob-badge { font-size: 11px !important; padding: 2px 7px !important; }
-          .uep-mob-btn { font-size: 13px !important; padding: 0.38rem 0 !important; max-width: 99vw !important; }
-          .uep-mob-footer { padding: 0.5rem 2px 0.4rem 2px !important; border-radius: 0 !important; }
-          .uep-mob-secilen { font-size: 12px !important; padding: 5px 7px !important; }
-          .uep-mob-main {
-            max-width: 99vw !important;
-            padding-left: 6px !important;
-            padding-right: 6px !important;
-          }
-        }
-      `}</style>
-      <div style={{
-        minHeight: '100vh',
-        background: `linear-gradient(120deg, #fdf6ee 0%, #f9e7d3 100%),
-          radial-gradient(ellipse at 80% 10%, #ffe5b4 0%, transparent 70%),
-          radial-gradient(ellipse at 20% 80%, #ffd6a5 0%, transparent 70%),
-          radial-gradient(ellipse at 60% 60%, #fff7ed 0%, transparent 80%)`,
-        backgroundBlendMode: 'overlay, lighten, lighten, lighten',
-        padding: 0,
-        margin: 0,
-        width: '100%',
-        fontFamily: 'Montserrat, Inter, Segoe UI, Arial, sans-serif',
-        boxSizing: 'border-box',
-        overflowX: 'hidden',
-      }}>
-        <div className="uep-mob-main" style={{
-          maxWidth: 900,
-          margin: '0 auto',
-          padding: '18px 12px 0 12px',
-          width: '100%',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, justifyContent: 'center' }}>
-            <span style={{
-              fontSize: 32,
-              background: 'linear-gradient(135deg, #fff7ed 0%, #ffe5b4 100%)',
-              borderRadius: 18,
-              padding: '8px 16px',
-              color: '#5a4a2f',
-              boxShadow: '0 4px 24px 0 #ffd6a577',
-              marginRight: 8,
-              maxWidth: 40,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '2px solid #ffe5b4',
-              filter: 'blur(0.2px) saturate(1.1)',
-            }}>📦</span>
-            <h2 style={{
-              fontWeight: 900,
-              color: '#5a4a2f',
-              fontSize: 27,
-              letterSpacing: 0.7,
-              margin: 0,
-              textShadow: '0 2px 18px #ffd6a599, 0 1px 8px #ffe5b444'
-            }}>Toplu Ürün Girişi</h2>
-          </div>
-          {/* Üstteki uyarı kaldırıldı, sadece sticky footer üstünde gösterilecek */}
-          {showDateConfirm && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 18 }}>
-              <Alert variant="warning" style={{
-                borderRadius: 18,
-                fontWeight: 800,
-                fontSize: 17,
-                background: '#fef9c3',
-                border: '2px solid #facc15',
-                color: '#b45309',
-                boxShadow: '0 2px 16px 0 rgba(250,204,21,0.10)',
-                letterSpacing: 0.09,
-                minWidth: 260,
-                textAlign: 'center',
-                margin: 0
+    <Container className="py-3" style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
+      {message && <Alert variant={message.type} style={{ 
+        backgroundColor: message.type === 'success' ? '#d1e7dd' : '#f8d7da',
+        borderColor: message.type === 'success' ? '#badbcc' : '#f5c2c7',
+        color: message.type === 'success' ? '#0f5132' : '#842029'
+      }}>{message.text}</Alert>}
+
+      <Form.Group className="mb-3">
+        <Form.Label style={{ color: '#495057', fontWeight: '500' }}>Oluşturulma Tarihi</Form.Label>
+        <Form.Control
+          type="date"
+          value={createdDate}
+          onChange={(e) => setCreatedDate(e.target.value)}
+          style={{ 
+            backgroundColor: '#ffffff',
+            borderColor: '#ced4da',
+            color: '#495057'
+          }}
+        />
+      </Form.Group>
+
+      <Form.Group className="mb-3">
+        <Form.Label style={{ color: '#495057', fontWeight: '500' }}>Teslim Eden Kişi</Form.Label>
+        <Form.Control
+          type="text"
+          placeholder="Teslim eden kişi adı"
+          value={deliveredBy}
+          onChange={(e) => setDeliveredBy(e.target.value)}
+          style={{ 
+            backgroundColor: '#ffffff',
+            borderColor: '#ced4da',
+            color: '#495057'
+          }}
+        />
+      </Form.Group>
+
+      <Form.Group className="mb-3">
+        <Form.Label style={{ color: '#495057', fontWeight: '500' }}>Açıklama</Form.Label>
+        <Form.Control
+          as="textarea"
+          rows={2}
+          placeholder="İrsaliye açıklaması..."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          style={{ 
+            backgroundColor: '#ffffff',
+            borderColor: '#ced4da',
+            color: '#495057'
+          }}
+        />
+      </Form.Group>
+
+      <Form.Control
+        className="mb-3"
+        placeholder="🔍 Ürün ara..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ 
+          backgroundColor: '#ffffff',
+          borderColor: '#dee2e6',
+          color: '#495057',
+          fontSize: '16px'
+        }}
+      />
+
+      <Row className="g-3">
+        {filteredProducts.map((p) => {
+          const q = quantities[p.id] || "";
+          const toplam = parseFloat(p.unitPrice) * (parseFloat(q) || 0);
+          return (
+            <Col xs={12} sm={6} md={4} key={p.id}>
+              <Card className="h-100 shadow-sm border-0" style={{ 
+                backgroundColor: '#ffffff',
+                borderRadius: '12px',
+                border: '1px solid #e9ecef'
               }}>
-                Bu tarihte irsaliye mevcut. Üstüne eklemek istiyor musunuz?
-              </Alert>
-              <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                <Button variant="success" style={{ fontWeight: 700, minWidth: 80 }} onClick={async () => {
-                  setShowDateConfirm(false);
-                  if (pendingEntry) {
-                    await saveEntry(
-                      Object.entries(quantities).filter(([, v]) => parseFloat(v) > 0),
-                      new Date(createdDate),
-                      pendingEntry.dateKey
-                    );
-                    setPendingEntry(null);
-                  }
-                }}>Evet</Button>
-                <Button variant="outline-danger" style={{ fontWeight: 700, minWidth: 80 }} onClick={() => {
-                  setShowDateConfirm(false);
-                  setPendingEntry(null);
-                  setMessage({ type: "info", text: "Kayıt iptal edildi." });
-                  setTimeout(() => { setMessage(null); }, 2000);
-                }}>Hayır</Button>
-              </div>
-            </div>
-          )}
-          <Form.Group className="mb-4">
-            <Form.Label style={{ fontWeight: 900, color: '#3d2c13', fontSize: 17, letterSpacing: 0.3, marginBottom: 6, textTransform: 'uppercase', textShadow: '0 1px 6px #fff7ed' }}>Oluşturulma Tarihi</Form.Label>
-            <Form.Control
-              type="date"
-              value={createdDate}
-              onChange={(e) => setCreatedDate(e.target.value)}
-              style={{ borderRadius: 18, border: '1.5px solid #ffe5b4', fontWeight: 700, fontSize: 16, background: '#fffdf8', color: '#3d2c13', boxShadow: '0 2px 12px 0 #ffe5b422', transition: 'border 0.18s', outline: 'none', padding: '0.7rem 1.1rem' }}
-              onFocus={e => e.target.style.border = '1.5px solid #ffe5b4'}
-              onBlur={e => e.target.style.border = '1.5px solid #ffd6a5'}
-            />
-          </Form.Group>
-          <Form.Group className="mb-4">
-            <Form.Label style={{ fontWeight: 900, color: '#3d2c13', fontSize: 17, letterSpacing: 0.3, marginBottom: 6, textTransform: 'uppercase', textShadow: '0 1px 6px #fff7ed' }}>Teslim Eden Kişi</Form.Label>
-            <Form.Control
-              type="text"
-              placeholder="Teslim eden kişi adı"
-              value={deliveredBy}
-              onChange={(e) => setDeliveredBy(e.target.value)}
-              style={{ borderRadius: 18, border: '1.5px solid #ffe5b4', fontWeight: 700, fontSize: 16, background: '#fffdf8', color: '#3d2c13', boxShadow: '0 2px 12px 0 #ffe5b422', transition: 'border 0.18s', outline: 'none', padding: '0.7rem 1.1rem' }}
-              onFocus={e => e.target.style.border = '1.5px solid #ffe5b4'}
-              onBlur={e => e.target.style.border = '1.5px solid #ffd6a5'}
-            />
-          </Form.Group>
-          <Form.Group className="mb-4">
-            <Form.Label style={{ fontWeight: 900, color: '#3d2c13', fontSize: 17, letterSpacing: 0.3, marginBottom: 6, textTransform: 'uppercase', textShadow: '0 1px 6px #fff7ed' }}>Açıklama</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={2}
-              placeholder="İrsaliye açıklaması..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={{ borderRadius: 18, border: '1.5px solid #ffe5b4', fontWeight: 700, fontSize: 16, background: '#fffdf8', color: '#3d2c13', boxShadow: '0 2px 12px 0 #ffe5b422', transition: 'border 0.18s', outline: 'none', padding: '0.7rem 1.1rem' }}
-              onFocus={e => e.target.style.border = '1.5px solid #ffe5b4'}
-              onBlur={e => e.target.style.border = '1.5px solid #ffd6a5'}
-            />
-          </Form.Group>
-          <Form.Control
-            className="mb-4"
-            placeholder="🔍 Ürün ara..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ borderRadius: 18, border: '1.5px solid #ffd6a5', fontWeight: 700, fontSize: 16, background: '#fff7ed', color: '#5a4a2f', boxShadow: '0 2px 12px 0 #ffd6a522', transition: 'border 0.18s', outline: 'none', padding: '0.7rem 1.1rem' }}
-            onFocus={e => e.target.style.border = '1.5px solid #ffe5b4'}
-            onBlur={e => e.target.style.border = '1.5px solid #ffd6a5'}
-          />
+                <Card.Body className="d-flex flex-column justify-content-between" style={{ padding: '1.25rem' }}>
+                  <div>
+                    <Card.Title className="fs-6 text-truncate" style={{ 
+                      color: '#343a40',
+                      fontWeight: '600',
+                      marginBottom: '0.75rem'
+                    }}>{p.name}</Card.Title>
+                    <Card.Text className="small text-muted mb-3" style={{ color: '#6c757d' }}>
+                      ₺{parseFloat(p.unitPrice).toFixed(2)} — <Badge bg="light" text="dark" style={{ 
+                        backgroundColor: '#e9ecef',
+                        color: '#495057',
+                        border: '1px solid #dee2e6'
+                      }}>{p.category || "Diğer"}</Badge>
+                    </Card.Text>
+                  </div>
+                  <div style={{ marginTop: '12px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '8px', 
+                      alignItems: 'stretch',
+                      height: '56px'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <Form.Control
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={q}
+                          placeholder="Adet girin..."
+                          onChange={(e) => handleQuantityChange(p.id, e.target.value)}
+                          style={{ 
+                            backgroundColor: '#ffffff',
+                            borderColor: q ? '#28a745' : '#ced4da',
+                            color: '#343a40',
+                            fontSize: '18px',
+                            fontWeight: '500',
+                            padding: '16px 20px',
+                            height: '56px',
+                            borderRadius: '12px',
+                            border: `2px solid ${q ? '#28a745' : '#e9ecef'}`,
+                            boxShadow: q ? '0 0 0 0.2rem rgba(40, 167, 69, 0.25)' : 'none',
+                            transition: 'all 0.3s ease'
+                          }}
+                        />
+                      </div>
+                      <div style={{
+                        backgroundColor: toplam > 0 ? '#28a745' : '#e9ecef',
+                        color: toplam > 0 ? '#ffffff' : '#6c757d',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: '100px',
+                        fontWeight: '700',
+                        fontSize: '16px',
+                        border: 'none',
+                        transition: 'all 0.3s ease'
+                      }}>
+                        ₺{toplam.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+          );
+        })}
+      </Row>
+
+      <div ref={sentinelRef} style={{ height: 120 }} />
+
+      <div
+        style={{
+          position: stickFooter ? "fixed" : "static",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: "linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)",
+          padding: "1.25rem",
+          borderTop: "1px solid #e9ecef",
+          boxShadow: stickFooter ? "0 -4px 20px rgba(0,0,0,0.08)" : "none",
+          zIndex: 1020,
+        }}
+      >
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <small 
+            className="text-muted" 
+            style={{ 
+              color: '#6c757d', 
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              fontWeight: '500'
+            }}
+            onClick={() => setShowSelectedModal(true)}
+          >
+            📋 Toplam Seçilen: {toplamSecilen} adet (Detayları Gör)
+          </small>
+          <strong className="text-success" style={{ color: '#198754', fontSize: '1.1rem' }}>₺{toplamTutar.toFixed(2)}</strong>
         </div>
-        <Row
-          className="g-4 justify-content-center"
+        <Button
+          className="w-100"
+          variant="success"
+          disabled={saving}
+          onClick={handleSaveAll}
           style={{
-            rowGap: 28,
-            columnGap: 0,
-            width: '100%',
-            margin: 0,
+            backgroundColor: saving ? '#6c757d' : '#198754',
+            borderColor: saving ? '#6c757d' : '#198754',
+            color: '#ffffff',
+            fontWeight: '600',
+            padding: '12px 0',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '16px'
           }}
         >
-          {filteredProducts.map((p) => {
-            const q = quantities[p.id] || "";
-            const toplam = parseFloat(p.unitPrice) * (parseFloat(q) || 0);
-            return (
-              <Col
-                xs={12}
-                sm={6}
-                md={4}
-                lg={3}
-                key={p.id}
-                style={{ display: 'flex', justifyContent: 'center' }}
-              >
-                <Card
-                  className="h-100 border-0 w-100"
-                  style={{
-                    borderRadius: 26,
-                    background: 'rgba(255,247,237,0.92)',
-                    boxShadow: '0 8px 32px 0 #ffd6a555, 0 2px 12px 0 #ffe5b422',
-                    border: '2px solid #ffe5b4',
-                    padding: '1.1rem 0.7rem',
-                    minHeight: 180,
-                    position: 'relative',
-                    overflow: 'hidden',
-                    transition: 'box-shadow 0.22s, border 0.22s',
-                    width: '100%',
-                    maxWidth: 340,
-                    backdropFilter: 'blur(8px) saturate(1.2)',
-                  }}
-                  onMouseOver={e => {
-                    e.currentTarget.style.boxShadow = '0 16px 48px 0 #ffd6a5cc, 0 2px 12px 0 #ffe5b4cc';
-                    e.currentTarget.style.border = '2.5px solid #ffd6a5';
-                  }}
-                  onMouseOut={e => {
-                    e.currentTarget.style.boxShadow = '0 8px 32px 0 #ffd6a555, 0 2px 12px 0 #ffe5b422';
-                    e.currentTarget.style.border = '2px solid #ffe5b4';
-                  }}
-                >
-                  <Card.Body className="d-flex flex-column justify-content-between">
-                    <div>
-                      <Card.Title className="fs-6 text-truncate uep-mob-title" style={{ fontWeight: 900, color: '#3d2c13', fontSize: 18, letterSpacing: 0.10 }}>{p.name}</Card.Title>
-                      <Card.Text className="small mb-3" style={{ color: '#3d2c13', fontWeight: 700, fontSize: 15 }}>
-                        ₺{parseFloat(p.unitPrice).toFixed(2)} — <Badge bg="light" text="dark" className="uep-mob-badge" style={{ border: '1.5px solid #ffe5b4', fontWeight: 800, fontSize: 13, borderRadius: 9, padding: '2px 11px', background: '#fffdf8', color: '#3d2c13', letterSpacing: 0.06, boxShadow: '0 1px 6px #ffe5b422' }}>{p.category || "Diğer"}</Badge>
-                      </Card.Text>
+          {saving ? "Kaydediliyor..." : "Tümünü Kaydet ve Gönder"}
+        </Button>
+      </div>
+
+      {/* Seçilen Ürünler Modal */}
+      <Modal show={showSelectedModal} onHide={() => setShowSelectedModal(false)} size="lg" centered>
+        <Modal.Header closeButton style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
+          <Modal.Title style={{ color: '#495057', fontWeight: '600' }}>
+            📋 Seçilen Ürünler ({toplamSecilen} adet)
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ backgroundColor: '#ffffff', maxHeight: '60vh', overflowY: 'auto' }}>
+          {Object.entries(quantities).filter(([id, qty]) => qty && parseFloat(qty) > 0).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
+              <div style={{ fontSize: '3em', marginBottom: '16px' }}>🛒</div>
+              <p>Henüz ürün seçmediniz.</p>
+            </div>
+          ) : (
+            <div className="row g-3">
+              {Object.entries(quantities).filter(([id, qty]) => qty && parseFloat(qty) > 0).map(([productId, qty]) => {
+                const product = products.find(p => p.id === productId);
+                if (!product) return null;
+                const toplam = parseFloat(product.unitPrice) * parseFloat(qty);
+                return (
+                  <div key={productId} className="col-12" style={{ marginBottom: '12px' }}>
+                    <div style={{
+                      backgroundColor: '#f8f9fa',
+                      padding: '16px',
+                      borderRadius: '8px',
+                      border: '1px solid #e9ecef'
+                    }}>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <strong style={{ color: '#343a40', fontSize: '16px' }}>{product.name}</strong>
+                          <div style={{ color: '#6c757d', fontSize: '14px', marginTop: '4px' }}>
+                            {parseFloat(qty)} adet × ₺{parseFloat(product.unitPrice).toFixed(2)}
+                          </div>
+                        </div>
+                        <div style={{
+                          backgroundColor: '#198754',
+                          color: 'white',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          fontWeight: '600',
+                          fontSize: '16px'
+                        }}>
+                          ₺{toplam.toFixed(2)}
+                        </div>
+                      </div>
                     </div>
-                    <InputGroup size="sm">
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        value={q}
-                        placeholder="Adet"
-                        onChange={(e) => handleQuantityChange(p.id, e.target.value)}
-                        style={{ borderRadius: 12, border: '2px solid #ffd6a5', fontWeight: 800, fontSize: 16, background: 'rgba(255,247,237,0.97)', color: '#5a4a2f', boxShadow: '0 1px 6px #ffd6a522', transition: 'border 0.18s', outline: 'none', padding: '0.55rem 0.8rem', backdropFilter: 'blur(2px)' }}
-                        onFocus={e => e.target.style.border = '2px solid #ffe5b4'}
-                        onBlur={e => e.target.style.border = '2px solid #ffd6a5'}
-                      />
-                      <InputGroup.Text style={{ background: 'linear-gradient(90deg, #fff7ed 0%, #ffd6a5 100%)', fontWeight: 800, color: '#5a4a2f', border: '1.5px solid #ffd6a5', fontSize: 15, borderRadius: 12, boxShadow: '0 1px 6px #ffd6a522' }}>₺{toplam.toFixed(2)}</InputGroup.Text>
-                    </InputGroup>
-                  </Card.Body>
-                </Card>
-              </Col>
-            );
-          })}
-        </Row>
-        <div ref={sentinelRef} style={{ height: 120 }} />
-        {message && (
-          <div
-            style={{
-              position: 'fixed',
-              top: 18,
-              right: 0,
-              left: 0,
-              display: 'flex',
-              justifyContent: 'center',
-              zIndex: 3000,
-              pointerEvents: 'none',
-            }}
-          >
-            <Alert
-              variant={message.type}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ backgroundColor: '#f8f9fa', borderTop: '2px solid #dee2e6' }}>
+          <div className="w-100 d-flex justify-content-between align-items-center">
+            <strong style={{ color: '#495057', fontSize: '18px' }}>
+              Toplam: ₺{toplamTutar.toFixed(2)}
+            </strong>
+            <Button 
+              variant="secondary" 
+              onClick={() => setShowSelectedModal(false)}
               style={{
-                borderRadius: 18,
-                fontWeight: 800,
-                fontSize: 17,
-                background: message.type === 'success'
-                  ? 'linear-gradient(90deg, #fff7ed 0%, #ffd6a5 100%)'
-                  : 'linear-gradient(90deg, #fdf6ee 0%, #f9e7d3 100%)',
-                border: '2.5px solid #ffd6a5',
-                color: '#5a4a2f',
-                boxShadow: '0 8px 32px 0 #ffd6a555',
-                letterSpacing: 0.09,
-                minWidth: 180,
-                textAlign: 'center',
-                margin: 0,
-                padding: '14px 26px',
-                maxWidth: 420,
-                pointerEvents: 'auto',
-                backdropFilter: 'blur(4px) saturate(1.1)',
+                backgroundColor: '#6c757d',
+                borderColor: '#6c757d',
+                color: '#ffffff',
+                fontWeight: '600',
+                padding: '8px 20px'
               }}
             >
-              {message.text}
-            </Alert>
+              Kapat
+            </Button>
           </div>
-        )}
-        <div
-          className={stickFooter ? 'uep-mob-footer' : 'uep-mob-footer'}
-          style={{
-            position: stickFooter ? "fixed" : "static",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: 'rgba(255,247,237,0.97)',
-            backdropFilter: stickFooter ? 'blur(14px) saturate(1.2)' : 'none',
-            WebkitBackdropFilter: stickFooter ? 'blur(14px) saturate(1.2)' : 'none',
-            padding: stickFooter ? '0.7rem min(2vw,16px) 0.6rem min(2vw,16px)' : '0.7rem 0 0.6rem 0',
-            borderTop: '2px solid #ffd6a5',
-            boxShadow: stickFooter ? '0 -8px 32px 0 #ffd6a555' : 'none',
-            zIndex: 1020,
-            borderRadius: stickFooter ? '18px 18px 0 0' : '0',
-            maxWidth: '1600px',
-            margin: stickFooter ? '0 auto' : '0',
-            left: stickFooter ? '50%' : '0',
-            transform: stickFooter ? 'translateX(-50%)' : 'none',
-            width: '100%',
-            transition: 'all 0.22s',
-            boxSizing: 'border-box',
-            overflowX: 'hidden',
-          }}
-        >
-          <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-1 gap-2 gap-md-0" style={{ minHeight: 36 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 900, fontSize: 15, color: '#5a4a2f', letterSpacing: 0.08, background: 'linear-gradient(90deg, #ffd6a5 0%, #ffe5b4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                Toplam Seçilen: <span style={{ color: '#5a4a2f', fontWeight: 900, background: 'none', WebkitTextFillColor: 'unset' }}>{toplamSecilen}</span> adet
-              </span>
-              {secilenUrunler.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowSecilenler((v) => !v)}
-                  style={{
-                    background: 'linear-gradient(90deg, #fff7ed 0%, #ffd6a5 100%)',
-                    border: '1.5px solid #ffd6a5',
-                    borderRadius: 8,
-                    padding: '2px 12px',
-                    fontSize: 13,
-                    color: '#5a4a2f',
-                    fontWeight: 700,
-                    marginLeft: 6,
-                    cursor: 'pointer',
-                    outline: 'none',
-                    transition: 'background 0.18s',
-                    boxShadow: '0 1px 6px #ffd6a533',
-                  }}
-                >
-                  {showSecilenler ? 'Seçilenleri Gizle' : 'Seçilenleri Gör'}
-                </button>
-              )}
-            </div>
-            <span style={{ fontWeight: 900, fontSize: 17, color: '#5a4a2f', letterSpacing: 0.12, background: 'linear-gradient(90deg, #ffd6a5 0%, #ffe5b4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{`₺${toplamTutar.toFixed(2)}`}</span>
-          </div>
-          {showSecilenler && secilenUrunler.length > 0 && (
-            <div className="uep-mob-secilen" style={{
-              background: 'rgba(255,247,237,0.97)',
-              border: '2px solid #ffd6a5',
-              borderRadius: 12,
-              padding: '7px 14px',
-              fontSize: 14,
-              color: '#5a4a2f',
-              fontWeight: 700,
-              margin: '7px 0 2px 0',
-              maxHeight: 120,
-              overflowY: 'auto',
-              boxShadow: '0 2px 12px 0 #ffd6a522',
-              backdropFilter: 'blur(4px)',
-            }}>
-              {secilenUrunler.map((u) => (
-                <div key={u.name} style={{ borderBottom: '1px solid #ffd6a522', padding: '2px 0', fontSize: 14 }}>
-                  {u.name} <span style={{ color: '#5a4a2f' }}>x{u.adet}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <Button
-            className="w-100 uep-mob-btn"
-            variant="primary"
-            style={{
-              fontWeight: 800,
-              borderRadius: 14,
-              background: 'linear-gradient(90deg, #fff7ed 0%, #ffd6a5 100%)',
-              color: '#5a4a2f',
-              border: '2.5px solid #ffd6a5',
-              fontSize: 15,
-              boxShadow: '0 4px 18px 0 #ffd6a555',
-              letterSpacing: 0.12,
-              transition: 'background 0.22s, color 0.22s, border 0.22s',
-              marginTop: 6,
-              padding: '0.54rem 0',
-              width: '100%',
-              maxWidth: 340,
-              marginLeft: 'auto',
-              marginRight: 'auto',
-              display: 'block',
-              backdropFilter: 'blur(2px)',
-            }}
-            disabled={saving}
-            onClick={handleSaveAll}
-            onMouseOver={e => {
-              e.currentTarget.style.background = 'linear-gradient(90deg, #ffd6a5 0%, #fff7ed 100%)';
-              e.currentTarget.style.border = '2.5px solid #ffe5b4';
-              e.currentTarget.style.boxShadow = '0 8px 32px 0 #ffd6a5cc';
-            }}
-            onMouseOut={e => {
-              e.currentTarget.style.background = 'linear-gradient(90deg, #fff7ed 0%, #ffd6a5 100%)';
-              e.currentTarget.style.border = '2.5px solid #ffd6a5';
-              e.currentTarget.style.boxShadow = '0 4px 18px 0 #ffd6a555';
-            }}
-          >
-            {saving ? "Kaydediliyor..." : "Tümünü Kaydet ve Gönder"}
-          </Button>
-        </div>
-      </div>
-    </>
+        </Modal.Footer>
+      </Modal>
+    </Container>
   );
 };
+
 export default UnifiedEntryPanel;

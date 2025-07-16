@@ -10,6 +10,15 @@
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 
     <title>GaziStok</title>
+    <script src="OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "c6f47c12-6c07-475b-a1b5-9ef5e4cd4a66",
+        });
+      });
+    </script>
   </head>
   <body>
     <noscript>Uygulamayı çalıştırmak için JavaScript’i etkinleştirmeniz gerekiyor.</noscript>

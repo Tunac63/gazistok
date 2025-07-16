@@ -82,11 +82,8 @@ const AppSelector = () => {
       desc: "Tedarikçi yönetimi ve stok sayım işlemleri",
       color: "#198754",
       onClick: () => {
-        setModalContent({
-          title: "🚚 Dış Tedarik & Stok Sayım",
-          desc: "Dış tedarikçi yönetimi ve stok sayım işlemleri çok yakında burada olacak."
-        });
-        setShowModal(true);
+        // Sadece bu kart için doğrudan yönlendirme
+        navigate("/supply-stock");
       },
       bgHover: "#e9f7ef",
       shadowColor: "#19875470",

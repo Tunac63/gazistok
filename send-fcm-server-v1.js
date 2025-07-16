@@ -6,8 +6,28 @@ const { google } = require('googleapis');
 const fs = require('fs');
 require('dotenv').config();
 
+// DEBUG: Ortam değişkeni ve dosya varlığı kontrolü
+console.log("GOOGLE_APPLICATION_CREDENTIALS:", process.env.GOOGLE_APPLICATION_CREDENTIALS);
+console.log("service-account.json exists:", fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS));
+
+
 const app = express();
-app.use(cors());
+
+// Sadece belirli origin'e izin ver (güvenlik için)
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://gazistok.onrender.com',
+];
+app.use(cors({
+  origin: function (origin, callback) {
+    // Postman veya undefined origin için izin ver
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS hatası: ' + origin));
+    }
+  }
+}));
 app.use(bodyParser.json());
 
 // Service account json dosyasının yolu
@@ -60,11 +80,15 @@ app.post('/send-fcm', async (req, res) => {
         body: JSON.stringify(message),
       });
       const data = await response.json();
-      results.push({ token, response: data });
+      if (!response.ok) {
+        results.push({ token, error: data.error || data });
+      } else {
+        results.push({ token, response: data });
+      }
     }
     res.json({ success: true, results });
   } catch (err) {
-    res.status(500).json({ error: 'FCM gönderim hatası', detail: err.message });
+    res.status(500).json({ error: 'FCM gönderim hatası', detail: err.message, stack: err.stack });
   }
 });
 
@@ -74,9 +98,13 @@ app.get('/healthz', (req, res) => {
   res.status(200).send('ok');
 });
 
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
-  console.log('FCM v1 sunucusu çalışıyor: http://localhost:' + PORT);
+  console.log(`FCM v1 sunucusu çalışıyor: http://localhost:${PORT} (Render'da PORT: ${process.env.PORT || 'yok'})`);
+  // DEBUG: Ortam değişkeni ve dosya varlığı kontrolü (logda kesin görünsün diye)
+  console.log("GOOGLE_APPLICATION_CREDENTIALS (listen):", process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  console.log("service-account.json exists (listen):", fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS));
 });
 
 // Kurulum:
