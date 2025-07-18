@@ -17,28 +17,23 @@
   text-align: center;
   margin-bottom: 50px;
   padding: 40px 20px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
 .modern-header h1 {
   font-size: 3.5rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #ffffff, #f0f0f0);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  color: #2d3748;
   margin-bottom: 15px;
   letter-spacing: -0.02em;
 }
 
 .modern-header p {
   font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: #4a5568;
   font-weight: 500;
 }
 
@@ -161,15 +156,15 @@
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-  gap: 30px;
-  margin-top: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 20px;
 }
 
 .modern-product-card {
   background: linear-gradient(135deg, #ffffff, #f8fafc);
-  border-radius: 25px;
-  padding: 30px;
+  border-radius: 18px;
+  padding: 18px;
   border: 2px solid transparent;
   transition: all 0.4s ease;
   position: relative;
@@ -199,23 +194,23 @@
 }
 
 .product-name-modern {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #2d3748;
-  margin-bottom: 25px;
+  margin-bottom: 18px;
   text-align: center;
 }
 
 .form-group-modern {
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
 
 .form-label-modern {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #4a5568;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -223,10 +218,10 @@
 .form-input-modern,
 .form-select-modern {
   width: 100%;
-  padding: 15px 18px;
+  padding: 12px 15px;
   border: 2px solid #e2e8f0;
-  border-radius: 15px;
-  font-size: 1rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
   font-weight: 500;
   transition: all 0.3s ease;
   background: #ffffff;
@@ -245,9 +240,9 @@
   background: linear-gradient(135deg, #667eea, #764ba2);
   color: white;
   border: none;
-  padding: 16px 24px;
-  border-radius: 15px;
-  font-size: 1.1rem;
+  padding: 14px 20px;
+  border-radius: 12px;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -339,30 +334,209 @@
   transform: scale(1.1);
 }
 
-@media (max-width: 768px) {
-  .modern-header h1 {
-    font-size: 2.5rem;
+/* Animasyonlar */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
   }
-  
-  .product-grid,
-  .approved-orders-grid {
-    grid-template-columns: 1fr;
+  50% {
+    box-shadow: 0 15px 40px rgba(102, 126, 234, 0.7);
+    transform: scale(1.05);
   }
-  
-  .modern-container {
-    padding: 20px 15px;
-    padding-right: 15px; /* Mobile'da sticky cart yok */
-  }
-  
-  /* Mobile'da sticky cart'ı gizle */
-  .sticky-cart-mobile {
-    display: none !important;
+  100% {
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
   }
 }
 
-@media (min-width: 769px) {
+/* Toast Notification Animation */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+/* Mobile Slide Up Animation */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Fade In Animation for Desktop Modal */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Modern scroll bar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5a67d8, #6b46c1);
+}
+
+@media (max-width: 768px) {
   .modern-container {
-    padding-right: 360px; /* Sticky cart için alan bırak */
+    padding: 15px 10px;
+  }
+
+  .modern-header {
+    padding: 25px 15px;
+    margin-bottom: 30px;
+  }
+
+  .modern-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+  }
+
+  .modern-header p {
+    font-size: 1rem;
+  }
+
+  .glass-card {
+    padding: 20px 15px;
+    margin-bottom: 20px;
+    border-radius: 20px;
+  }
+
+  .section-title {
+    font-size: 1.8rem;
+    margin-bottom: 20px;
+  }
+
+  .section-title::before {
+    width: 3px;
+    height: 30px;
+  }
+
+  /* Grid responsive */
+  .approved-orders-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .product-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .order-card {
+    padding: 15px 12px;
+    border-radius: 12px;
+  }
+
+  .modern-product-card {
+    padding: 15px 12px;
+    border-radius: 12px;
+  }
+
+  /* Modal responsive */
+  .modal-modern {
+    padding: 10px;
+  }
+
+  .modal-content-modern {
+    max-width: 95%;
+    margin: 20px auto;
+    padding: 20px;
+    border-radius: 15px;
+  }
+
+  /* Cart responsive */
+  .cart-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .cart-item {
+    padding: 12px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-header h1 {
+    font-size: 2rem;
+  }
+
+  .modern-header p {
+    font-size: 0.9rem;
+  }
+
+  .glass-card {
+    padding: 15px 10px;
+    border-radius: 15px;
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .order-card {
+    padding: 15px 10px;
+  }
+
+  .modern-product-card {
+    padding: 15px 10px;
+  }
+
+  .form-group-modern {
+    gap: 8px;
+  }
+
+  .form-input-modern,
+  .form-select-modern {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .add-to-cart-modern {
+    padding: 12px;
+    font-size: 14px;
   }
 }
 
@@ -461,4 +635,87 @@
 
 .product-weight {
   color: #6c757d;
+}
+
+/* Floating Button Animations */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
+  }
+  50% {
+    box-shadow: 0 15px 40px rgba(102, 126, 234, 0.7);
+    transform: scale(1.05);
+  }
+  100% {
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Responsive Improvements */
+@media (max-width: 768px) {
+  .modern-header h1 {
+    font-size: 2.5rem;
+  }
+  
+  .glass-card {
+    margin: 15px 0;
+    padding: 20px;
+  }
+  
+  .section-title {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-container {
+    padding: 20px 15px;
+  }
+  
+  .modern-header {
+    padding: 30px 15px;
+    margin-bottom: 30px;
+  }
+  
+  .modern-header h1 {
+    font-size: 2rem;
+  }
+  
+  .glass-card {
+    border-radius: 20px;
+    padding: 15px;
+  }
 }

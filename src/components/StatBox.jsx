@@ -10,6 +10,7 @@ const iconMap = {
   users: <FaUserFriends />,
   today: <FaChartLine />,
   lowStock: <FaExclamationTriangle />,
+  salary: "💰",
 };
 
 const colorMap = {
@@ -17,20 +18,30 @@ const colorMap = {
   users: "linear-gradient(135deg, #ffc107, #ffce6b)",
   today: "linear-gradient(135deg, #198754, #6fcf97)",
   lowStock: "linear-gradient(135deg, #dc3545, #ff6b6b)",
+  salary: "linear-gradient(135deg, #6f42c1, #8e44ad)",
 };
 
-const StatBox = ({ type, value, label }) => (
-  <Card className="text-white shadow-sm border-0 mb-3" style={{
-    background: colorMap[type],
-    borderRadius: "1rem"
-  }}>
+const StatBox = ({ type, value, label, onClick, style }) => (
+  <Card 
+    className="text-white shadow-sm border-0 mb-3" 
+    style={{
+      background: colorMap[type],
+      borderRadius: "1rem",
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'transform 0.2s ease',
+      ...style
+    }}
+    onClick={onClick}
+    onMouseEnter={(e) => onClick && (e.target.closest('.card').style.transform = 'scale(1.02)')}
+    onMouseLeave={(e) => onClick && (e.target.closest('.card').style.transform = 'scale(1)')}
+  >
     <Card.Body className="d-flex justify-content-between align-items-center">
       <div>
         <h6 className="text-light">{label}</h6>
         <h4 className="fw-bold">{value}</h4>
       </div>
       <IconContext.Provider value={{ size: "2em" }}>
-        {iconMap[type]}
+        {type === 'salary' ? iconMap[type] : iconMap[type]}
       </IconContext.Provider>
     </Card.Body>
   </Card>

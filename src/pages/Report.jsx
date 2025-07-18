@@ -100,10 +100,36 @@ const Report = () => {
 
   return (
     <Container className="mt-4">
+      {/* Header with Back Button */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '20px',
+        padding: '15px 20px',
+        background: 'white',
+        borderRadius: '15px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+      }}>
+        <h3 className="fw-bold text-primary" style={{ margin: 0 }}>📊 Ürün Raporu</h3>
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            background: 'transparent',
+            border: '2px solid #5a6c7d',
+            borderRadius: '8px',
+            color: '#5a6c7d',
+            padding: '8px 16px',
+            fontSize: '14px',
+            cursor: 'pointer',
+            fontWeight: '600'
+          }}
+        >
+          ← Ana Menü
+        </button>
+      </div>
+
       <Row className="mb-4 align-items-center">
-        <Col>
-          <h3 className="fw-bold text-primary">📊 Ürün Raporu</h3>
-        </Col>
         <Col className="text-end">
           <Badge bg="info" pill className="fs-6 me-2">
             Toplam Adet: {totalQuantity}

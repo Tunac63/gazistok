@@ -51,7 +51,35 @@ const ProductList = ({ role }) => {
 
   return (
     <div className="mt-4">
-      <h4>📋 Ürün Listesi</h4>
+      {/* Header with Back Button */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '20px',
+        padding: '15px 20px',
+        background: 'white',
+        borderRadius: '15px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+      }}>
+        <h4 style={{ color: '#2d3748', margin: 0 }}>📋 Ürün Listesi</h4>
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            background: 'transparent',
+            border: '2px solid #5a6c7d',
+            borderRadius: '8px',
+            color: '#5a6c7d',
+            padding: '8px 16px',
+            fontSize: '14px',
+            cursor: 'pointer',
+            fontWeight: '600'
+          }}
+        >
+          ← Ana Menü
+        </button>
+      </div>
+
       {message && <Alert variant={message.type}>{message.text}</Alert>}
 
       <Table striped bordered hover responsive>

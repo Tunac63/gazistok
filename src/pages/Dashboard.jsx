@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../firebase/config";
 import { ref, get } from "firebase/database";
+import { useAuthState } from "react-firebase-hooks/auth";
+import { auth } from "../firebase/config";
 import {
   Container,
   Row,
@@ -17,6 +19,7 @@ import ProductCard from "../components/ProductCard";
 import NotificationBanner from "../components/NotificationBanner";
 
 const Dashboard = () => {
+  const [user] = useAuthState(auth);
   const [entries, setEntries] = useState([]);
   const [products, setProducts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -26,6 +29,14 @@ const Dashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+
+  // Email'den kullanıcı adını çıkar (@ işaretinden sonraki domain'in ilk kısmını al)
+  const getUsernameFromEmail = (email) => {
+    if (!email) return "Kullanıcı";
+    const domain = email.split('@')[1]; // @ sonrası kısmı al
+    if (!domain) return "Kullanıcı";
+    return domain.split('.')[0]; // . den önceki kısmı al (tuna.com -> tuna)
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -145,14 +156,23 @@ const Dashboard = () => {
 
   return (
     <Container fluid className="py-4 px-md-4">
-      <WelcomeMessage username="Glow" />
+      <WelcomeMessage username={getUsernameFromEmail(user?.email)} />
       <NotificationBanner notifications={notifications} />
 
-      <Row xs={1} sm={2} md={4} className="g-4 mb-4">
+      <Row xs={1} sm={2} md={4} lg={5} className="g-4 mb-4">
         <Col><StatBox type="today" value={`₺${totalToday.toFixed(2)}`} label="Bugünkü Giriş" /></Col>
         <Col><StatBox type="products" value={products.length} label="Ürün Sayısı" /></Col>
         <Col><StatBox type="users" value={users.length} label="Kayıtlı Kullanıcılar" /></Col>
         <Col><StatBox type="lowStock" value={leastPurchased.length} label="En Az Alınanlar" /></Col>
+        <Col>
+          <StatBox 
+            type="salary" 
+            value="💰" 
+            label="Personel Maaşları" 
+            onClick={() => window.location.href = '/personel-maas'}
+            style={{ cursor: 'pointer' }}
+          />
+        </Col>
       </Row>
 
       <Row className="mb-4 g-4 flex-nowrap overflow-auto">

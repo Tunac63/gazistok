@@ -22,6 +22,11 @@ import CashSummary from "./pages/CashSummary";
 import AppSelector from "./pages/AppSelector";
 import DailyTasks from "./pages/DailyTasks";
 import SupplyStock from "./pages/SupplyStock";
+import StockCount from "./pages/StockCount";
+import PersonelMaas from "./pages/PersonelMaas";
+import StaffManagement from "./pages/StaffManagement";
+import WeeklyShifts from "./pages/WeeklyShifts";
+import StaffList from "./pages/StaffList";
 
 // Ortak bileşen
 import Navbar from "./components/Navbar";
@@ -29,11 +34,18 @@ import Navbar from "./components/Navbar";
 // Korumalı rotalar
 import { PrivateRoute, AdminRoute, RoleRoute } from "./routes/ProtectedRoutes";
 
+// PWA güncelleme bildirimi
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+
 function App() {
   const [user, loading] = useAuthState(auth);
   const [role, setRole] = useState(null);
   const [roleLoading, setRoleLoading] = useState(true);
   const [minDelayDone, setMinDelayDone] = useState(false);
+  
+  // PWA güncelleme state'leri
+  const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
+  const [waitingWorker, setWaitingWorker] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setMinDelayDone(true), 1000);
@@ -90,7 +102,33 @@ function App() {
     });
   }, []);
 
-  // ...existing code...
+  // PWA güncelleme kontrolü
+  useEffect(() => {
+    // Service worker güncelleme callback'leri
+    const onSWUpdate = (registration) => {
+      setShowUpdatePrompt(true);
+      setWaitingWorker(registration.waiting);
+    };
+
+    const onSWSuccess = () => {
+      console.log("✅ PWA başarıyla yüklendi!");
+    };
+
+    // Service worker'ı kaydet
+    serviceWorkerRegistration.register({
+      onUpdate: onSWUpdate,
+      onSuccess: onSWSuccess,
+    });
+  }, []);
+
+  // Güncelleme işlemi
+  const updateApp = () => {
+    if (waitingWorker) {
+      waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+      setShowUpdatePrompt(false);
+      window.location.reload();
+    }
+  };
 
   useEffect(() => {
     setRoleLoading(true);
@@ -201,6 +239,57 @@ function App() {
 
   return (
     <Router>
+      {/* PWA Güncelleme Bildirimi */}
+      {showUpdatePrompt && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, #667eea, #764ba2)',
+          color: 'white',
+          padding: '15px 25px',
+          borderRadius: '15px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px',
+          fontWeight: '600',
+          fontSize: '14px'
+        }}>
+          <span>🚀 Yeni güncelleme mevcut!</span>
+          <button
+            onClick={updateApp}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.3)',
+              color: 'white',
+              padding: '8px 15px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: '600'
+            }}
+          >
+            ↻ Güncelle
+          </button>
+          <button
+            onClick={() => setShowUpdatePrompt(false)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '0 5px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      
       {user && <Navbar role={role} />}
       <Routes>
         {!user ? (
@@ -337,6 +426,46 @@ function App() {
                 <PrivateRoute user={user}>
                   <SupplyStock />
                 </PrivateRoute>
+              }
+            />
+            <Route
+              path="/stock-count"
+              element={
+                <PrivateRoute user={user}>
+                  <StockCount />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/personel-maas"
+              element={
+                <AdminRoute user={user} role={role}>
+                  <PersonelMaas onBack={() => window.history.back()} />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/staff-management"
+              element={
+                <AdminRoute user={user} role={role}>
+                  <StaffManagement />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/weekly-shifts"
+              element={
+                <AdminRoute user={user} role={role}>
+                  <WeeklyShifts />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/staff-list"
+              element={
+                <AdminRoute user={user} role={role}>
+                  <StaffList />
+                </AdminRoute>
               }
             />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,9 +5,6 @@ import './index.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import reportWebVitals from './reportWebVitals';
 
-// PWA için eklenen satır:
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
-
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
@@ -16,8 +13,8 @@ root.render(
   </React.StrictMode>
 );
 
-// Service worker'ı aktif et (PWA)
-serviceWorkerRegistration.register();
+// Performance ölçümü
+reportWebVitals();
 
 // Performans ölçümü için
 reportWebVitals();

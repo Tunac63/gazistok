@@ -4,6 +4,7 @@ import { Container, Row, Col, Card, Table, Form, Button, Alert, Spinner, Badge, 
 import { db } from "../firebase/config";
 import { ref, get, update, push, set, remove, onValue } from "firebase/database";
 import CalendarDatePicker from "../components/CalendarDatePicker";
+import StockApproval from "./StockApproval";
 
 
 
@@ -16,6 +17,7 @@ function AdminPanel() {
   const [supplyOrders, setSupplyOrders] = useState([]);
   const [message, setMessage] = useState(null);
   const [showToast, setShowToast] = useState(false);
+  const [showStockApproval, setShowStockApproval] = useState(false);
   // Bildirim gönderme için state
   const [notifTitle, setNotifTitle] = useState("");
   const [notifBody, setNotifBody] = useState("");
@@ -34,33 +36,61 @@ function AdminPanel() {
   // ...dosyanın geri kalanındaki kodlar...
 
   const handleApproveCashPassword = async () => {
-    if (!selectedCashRequest) return;
+    if (!selectedCashRequest) {
+      console.error("❌ selectedCashRequest bulunamadı!");
+      setCashPasswordError("Seçili talep bulunamadı. Lütfen tekrar deneyin.");
+      return;
+    }
     if (!cashPasswordInput || cashPasswordInput.length < 4) {
       setCashPasswordError("Şifre en az 4 karakter olmalı.");
       return;
     }
     setSavingCashPassword(true);
     try {
-      // Ortak şifreyi güncelle
-      await set(ref(db, "cashEntryPassword"), cashPasswordInput);
+      // Debug: Şifre kaydetme öncesi kontrol
+      console.log("=== ADMİN PANEL ŞİFRE KAYDETME DEBUG ===");
+      console.log("Kaydedilecek şifre:", cashPasswordInput);
+      console.log("Şifre tipi:", typeof cashPasswordInput);
+      console.log("Şifre uzunluğu:", cashPasswordInput.length);
+      console.log("Şifre karakter kodları:", Array.from(cashPasswordInput).map(c => c.charCodeAt(0)));
+      
+      // Kasa Girişi için özel şifreyi güncelle - trim ile boşlukları temizle
+      const cleanPassword = cashPasswordInput.trim();
+      console.log("Temizlenmiş şifre:", cleanPassword);
+      console.log("Temizlenmiş şifre uzunluğu:", cleanPassword.length);
+      console.log("Seçili talep:", selectedCashRequest);
+      
+      // Kullanıcı bazlı şifre sistemi - talebi yapan kullanıcıya özel şifre
+      let userKey = selectedCashRequest.uid || selectedCashRequest.email || `user_${Date.now()}`;
+      if (userKey.includes('@')) {
+        // Email ise, nokta ve özel karakterleri değiştir
+        userKey = userKey.replace(/\./g, '_DOT_').replace(/@/g, '_AT_').replace(/[#$[\]]/g, '_');
+      }
+      
+      console.log("Kullanılacak userKey:", userKey);
+      console.log("Firebase path:", `cashEntryPasswords/${userKey}`);
+      
+      await set(ref(db, `cashEntryPasswords/${userKey}`), cleanPassword);
+      
+      console.log("✅ Firebase'e kullanıcı şifresi başarıyla kaydedildi:", userKey);
+      console.log("=== DEBUG BİTİŞ ===");
       
       // Talep key'ini belirle (firebaseKey, id, uid veya timestamp)
       const requestKey = selectedCashRequest.firebaseKey || selectedCashRequest.id || selectedCashRequest.uid || Date.now();
       
-      // Talep kaydını güncelle
-      await set(ref(db, `cashPasswordRequests/${requestKey}`), {
-        ...selectedCashRequest,
+      // Talep kaydını güncelle - SET yerine UPDATE kullan
+      await update(ref(db, `cashPasswordRequests/${requestKey}`), {
         status: "approved",
-        assignedPassword: cashPasswordInput,
+        assignedPassword: cleanPassword,
         approvedTime: Date.now()
       });
       
       setCashRequests((prev) => prev.map(r => 
         (r.firebaseKey === selectedCashRequest.firebaseKey || r.id === selectedCashRequest.id || r.uid === selectedCashRequest.uid) 
-          ? { ...r, status: "approved", assignedPassword: cashPasswordInput } 
+          ? { ...r, status: "approved", assignedPassword: cleanPassword } 
           : r
       ));
-      setMessage({ type: 'success', text: `Şifre başarıyla kaydedildi ve gönderildi.` });
+      setMessage({ type: 'success', text: `Kasa Girişi şifresi başarıyla kaydedildi ve gönderildi.` });
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2000);
       setShowPasswordModal(false);
@@ -69,7 +99,7 @@ function AdminPanel() {
       setCashPasswordError("");
     } catch (err) {
       console.error("Şifre kaydetme hatası:", err);
-      setMessage({ type: 'danger', text: 'Şifre kaydedilemedi.' });
+      setMessage({ type: 'danger', text: `Şifre kaydedilemedi: ${err.message}` });
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2000);
     }
@@ -92,9 +122,11 @@ function AdminPanel() {
       const requestKey = requestToReject.firebaseKey || requestToReject.id || requestToReject.uid || Date.now();
       console.log("Kullanılan key:", requestKey); // Debug
       
-      // Talep kaydını güncelle
-      await set(ref(db, `cashPasswordRequests/${requestKey}/status`), 'rejected');
-      await set(ref(db, `cashPasswordRequests/${requestKey}/rejectedTime`), Date.now());
+      // Talep kaydını güncelle - SET yerine UPDATE kullan
+      await update(ref(db, `cashPasswordRequests/${requestKey}`), {
+        status: 'rejected',
+        rejectedTime: Date.now()
+      });
       
       // State güncellemesi - sadece belirli talebi güncelle
       setCashRequests((prev) => {
@@ -237,6 +269,15 @@ function AdminPanel() {
         }
         // Son 7 gün, en yeni en üstte
         setCleaningReports(cleaningArr.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7));
+        
+        // Tedarik Siparişleri
+        const supplyOrdersSnap = await get(ref(db, 'supplyOrders'));
+        let supplyOrdersArr = [];
+        if (supplyOrdersSnap.exists()) {
+          const val = supplyOrdersSnap.val();
+          supplyOrdersArr = Object.entries(val).map(([id, order]) => ({ id, ...order }));
+        }
+        setSupplyOrders(supplyOrdersArr);
       } catch (err) {
         setMessage({ type: 'danger', text: 'Veriler alınırken hata oluştu.' });
       }
@@ -513,7 +554,13 @@ function AdminPanel() {
 
   // Şifre talebini onayla ve şifreyi ata
   const handleAssignPassword = async () => {
-    if (!selectedRequest) return;
+    if (!selectedRequest) {
+      console.error("❌ selectedRequest bulunamadı!");
+      setMessage({ type: "danger", text: "Seçili talep bulunamadı. Lütfen tekrar deneyin." });
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+      return;
+    }
     if (newPassword.length < 4) {
       setMessage({ type: "danger", text: "Şifre en az 4 haneli olmalıdır." });
       setShowToast(true);
@@ -521,24 +568,44 @@ function AdminPanel() {
       return;
     }
     try {
-      // Kullanıcının şifresini güncelle
-      await set(ref(db, `users/${selectedRequest.uid}/password`), newPassword);
-      // Talep kaydını güncelle
-      await set(ref(db, `passwordRequests/${selectedRequest.id}`), {
-        ...selectedRequest,
+      console.log("=== SUPPLY ŞİFRE TALEBİ ONAYLAMA ===");
+      console.log("Onaylanacak şifre:", newPassword);
+      console.log("Seçili talep:", selectedRequest);
+      
+      // SupplyStock için kullanıcı bazlı şifre sistemi
+      const cleanPassword = newPassword.trim();
+      
+      // Email adresini Firebase path için güvenli hale getir
+      let userKey = selectedRequest.uid || selectedRequest.email || `user_${Date.now()}`;
+      if (userKey.includes('@')) {
+        // Email ise, nokta ve özel karakterleri değiştir
+        userKey = userKey.replace(/\./g, '_DOT_').replace(/@/g, '_AT_').replace(/[#$[\]]/g, '_');
+      }
+      
+      console.log("Kullanılacak userKey:", userKey);
+      console.log("Firebase path:", `supplyStockPasswords/${userKey}`);
+      
+      await set(ref(db, `supplyStockPasswords/${userKey}`), cleanPassword);
+      
+      console.log("✅ supplyStockPasswords güncellendi:", userKey, cleanPassword);
+      
+      // Talep kaydını güncelle - SET yerine UPDATE kullan
+      await update(ref(db, `passwordRequests/${selectedRequest.id}`), {
         status: "approved",
-        assignedPassword: newPassword,
+        assignedPassword: cleanPassword,
         approvedTime: Date.now()
       });
-      setPasswordRequests((prev) => prev.map(req => req.id === selectedRequest.id ? { ...req, status: "approved", assignedPassword: newPassword } : req));
-      setMessage({ type: 'success', text: `Şifre başarıyla atandı ve talep onaylandı.` });
+      
+      setPasswordRequests((prev) => prev.map(req => req.id === selectedRequest.id ? { ...req, status: "approved", assignedPassword: cleanPassword } : req));
+      setMessage({ type: 'success', text: `SupplyStock şifresi başarıyla güncellendi ve talep onaylandı.` });
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2000);
       setShowPasswordApprovalModal(false);
       setSelectedRequest(null);
       setNewPassword("");
     } catch (err) {
-      setMessage({ type: 'danger', text: 'Şifre atanamadı.' });
+      console.error("Supply Stock şifre atama hatası:", err);
+      setMessage({ type: 'danger', text: `Şifre atanamadı: ${err.message}` });
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2000);
     }
@@ -570,8 +637,8 @@ function AdminPanel() {
   const handleApproveOrder = async (orderId) => {
     setApprovingOrderId(orderId);
     try {
-      // Onaylama işlemi
-      await update(ref(db, `orders/${orderId}`), { status: 'approved' });
+      // Onaylama işlemi - supplyOrders koleksiyonunu güncelle
+      await update(ref(db, `supplyOrders/${orderId}`), { status: 'approved' });
       setSupplyOrders((prev) => prev.map(order => order.id === orderId ? { ...order, status: 'approved' } : order));
       setMessage({ type: 'success', text: 'Sipariş başarıyla onaylandı.' });
     } catch (err) {
@@ -584,14 +651,59 @@ function AdminPanel() {
   const handleRejectOrder = async (orderId) => {
     setRejectingOrderId(orderId);
     try {
-      // Reddetme işlemi
-      await update(ref(db, `orders/${orderId}`), { status: 'rejected' });
+      // Reddetme işlemi - supplyOrders koleksiyonunu güncelle
+      await update(ref(db, `supplyOrders/${orderId}`), { status: 'rejected' });
       setSupplyOrders((prev) => prev.map((order) => order.id === orderId ? { ...order, status: 'rejected' } : order));
       setMessage({ type: 'success', text: 'Sipariş başarıyla reddedildi.' });
     } catch (err) {
       setMessage({ type: 'danger', text: 'Sipariş reddedilemedi.' });
     } finally {
       setRejectingOrderId(null);
+    }
+  };
+
+  // Sipariş teslim etme fonksiyonu
+  const handleDeliverOrder = async (orderId) => {
+    try {
+      // Siparişi "delivered" olarak işaretle veya sil
+      await update(ref(db, `supplyOrders/${orderId}`), { status: 'delivered' });
+      setSupplyOrders((prev) => prev.map((order) => order.id === orderId ? { ...order, status: 'delivered' } : order));
+      setMessage({ type: 'success', text: 'Sipariş teslim edildi olarak işaretlendi.' });
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+    } catch (err) {
+      setMessage({ type: 'danger', text: 'Sipariş teslim edilemedi.' });
+    }
+  };
+
+  // Şifre talep onaylama fonksiyonu
+  const handleApproveCashRequest = (request) => {
+    console.log("handleApproveCashRequest called with:", request);
+    setSelectedCashRequest(request);
+    setShowPasswordModal(true);
+  };
+
+  // Şifre talebini reddet
+  const handleRejectPasswordRequest = (req) => async () => {
+    try {
+      const requestKey = req.firebaseKey || req.id;
+      await update(ref(db, `passwordRequests/${requestKey}`), {
+        status: 'rejected',
+        rejectedTime: Date.now()
+      });
+      setPasswordRequests(prev => prev.map(r => 
+        (r.firebaseKey === req.firebaseKey || r.id === req.id) 
+          ? { ...r, status: 'rejected', rejectedTime: Date.now() } 
+          : r
+      ));
+      setMessage({ type: 'success', text: 'Talep reddedildi.' });
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+    } catch (err) {
+      console.error("Reddetme hatası:", err);
+      setMessage({ type: 'danger', text: 'Talep reddedilemedi.' });
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
     }
   };
 
@@ -606,8 +718,43 @@ function AdminPanel() {
     );
   }
 
+  // Stok onayı ekranı göster
+  if (showStockApproval) {
+    return <StockApproval onBack={() => setShowStockApproval(false)} />;
+  }
+
   return (
     <React.Fragment>
+      {/* Header with Back Button */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: '20px 40px',
+        background: 'white',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        marginBottom: '20px'
+      }}>
+        <h1 style={{ color: '#2d3748', margin: 0, fontSize: '24px', fontWeight: '700' }}>
+          🔧 Admin Panel
+        </h1>
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            background: 'transparent',
+            border: '2px solid #5a6c7d',
+            borderRadius: '8px',
+            color: '#5a6c7d',
+            padding: '10px 20px',
+            fontSize: '14px',
+            cursor: 'pointer',
+            fontWeight: '600'
+          }}
+        >
+          ← Ana Menü
+        </button>
+      </div>
+
       {/* Navigation Bar - Modern Style */}
       <nav style={{ marginBottom: 32, display: 'flex', justifyContent: 'center' }}>
         <ul style={{
@@ -634,6 +781,43 @@ function AdminPanel() {
 
       <Container>
         <Row className="g-4 flex-column" style={{ minHeight: 220 }}>
+          {/* Stok Sayım Onayları Paneli */}
+          <Col xs={12}>
+            <Container className="mb-4 p-0">
+              <Card className="shadow rounded-4 h-100 d-flex flex-column justify-content-between" style={{ minHeight: 220 }}>
+                <Card.Header className="bg-white d-flex align-items-center justify-content-between" style={{ fontWeight: 600, fontSize: 17 }}>
+                  <div className="d-flex align-items-center gap-2">
+                    <span role="img" aria-label="Stok">📋</span> Stok Sayım Onayları
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowStockApproval(true)}
+                  >
+                    📋 Onay Bekleyenler
+                  </Button>
+                </Card.Header>
+                <Card.Body className="d-flex flex-column justify-content-center align-items-center">
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '15px' }}>📊</div>
+                    <h5 style={{ color: '#2d3748', marginBottom: '10px' }}>
+                      Stok Sayım Yönetimi
+                    </h5>
+                    <p style={{ color: '#4a5568', fontSize: '14px', marginBottom: '20px' }}>
+                      Bekleyen stok sayımlarını onaylayın ve raporları oluşturun
+                    </p>
+                    <Button
+                      variant="outline-primary"
+                      onClick={() => setShowStockApproval(true)}
+                    >
+                      Onay Paneline Git
+                    </Button>
+                  </div>
+                </Card.Body>
+              </Card>
+            </Container>
+          </Col>
+          
           {/* Kasa Şifre Talepleri Paneli (eski yeri değişmedi) */}
           {/* ...diğer paneller... */}
           {/* Tedarik Siparişleri Paneli (artık navbarın altında, duplicate navbar kaldırıldı) */}
@@ -808,16 +992,19 @@ function AdminPanel() {
                           return (
                             <tr key={req.firebaseKey || req.id || req.uid}>
                               <td>{displayUser}</td>
-                              <td>{req.requestTime ? new Date(req.requestTime).toLocaleString('tr-TR') : '-'}</td>
-                              <td>{req.status === 'approved' ? <span style={{ color: '#198754' }}>Onaylandı</span> : req.status === 'rejected' ? <span style={{ color: '#dc3545' }}>Reddedildi</span> : <span style={{ color: '#ffc107' }}>Bekliyor</span>}</td>
+                              <td>{req.requestTime ? new Date(req.requestTime).toLocaleDateString('tr-TR') : '-'}</td>
                               <td>
-                                <div className="d-flex gap-2">
-                                  <Button size="sm" variant="primary" disabled={req.status !== 'pending'} onClick={() => {
-                                    setSelectedCashRequest(req);
-                                    setCashPasswordInput("");
-                                    setCashPasswordError("");
-                                    setShowPasswordModal(true);
-                                  }}>
+                                {req.status === 'approved' ? (
+                                  <span style={{ color: '#198754' }}>Onaylandı</span>
+                                ) : req.status === 'rejected' ? (
+                                  <span style={{ color: '#dc3545' }}>Reddedildi</span>
+                                ) : (
+                                  <span style={{ color: '#ffc107' }}>Bekliyor</span>
+                                )}
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <Button size="sm" variant="success" disabled={req.status !== 'pending'} onClick={() => handleApproveCashRequest(req)}>
                                     Onayla
                                   </Button>
                                   <Button size="sm" variant="danger" disabled={req.status !== 'pending'} onClick={() => handleRejectCashRequest(req)}>
@@ -1187,29 +1374,6 @@ function AdminPanel() {
     };
   }
 
-  // Şifre talebini reddet
-  function handleRejectPasswordRequest(req) {
-    return async () => {
-      try {
-        const requestKey = req.firebaseKey || req.id;
-        await set(ref(db, `passwordRequests/${requestKey}/status`), 'rejected');
-        await set(ref(db, `passwordRequests/${requestKey}/rejectedTime`), Date.now());
-        setPasswordRequests(prev => prev.map(r => 
-          (r.firebaseKey === req.firebaseKey || r.id === req.id) 
-            ? { ...r, status: 'rejected', rejectedTime: Date.now() } 
-            : r
-        ));
-        setMessage({ type: 'success', text: 'Talep reddedildi.' });
-        setShowToast(true);
-        setTimeout(() => setShowToast(false), 2000);
-      } catch (err) {
-        console.error("Reddetme hatası:", err);
-        setMessage({ type: 'danger', text: 'Talep reddedilemedi.' });
-        setShowToast(true);
-        setTimeout(() => setShowToast(false), 2000);
-      }
-    };
-  }
 }
 
 export default AdminPanel;

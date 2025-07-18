@@ -88,6 +88,15 @@ const AppSelector = () => {
       bgHover: "#e9f7ef",
       shadowColor: "#19875470",
     },
+    {
+      icon: "⏰",
+      title: "Personel Shift & Listesi",
+      desc: "Haftalık vardiya yönetimi ve personel bilgileri",
+      color: "#e91e63",
+      onClick: () => navigate("/staff-management"),
+      bgHover: "#fce4ec",
+      shadowColor: "#e91e6370",
+    },
   ];
 
   const headerStyle = {
@@ -104,7 +113,7 @@ const AppSelector = () => {
       className="d-flex justify-content-center align-items-center position-relative"
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(to right top, #f1f4f8, #fdfefe)",
+        background: "linear-gradient(to right top, #f8fafc, #ffffff)",
         overflow: "hidden",
       }}
     >

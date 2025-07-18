@@ -71,22 +71,7 @@ function DailyTasks(props) {
     { name: 'Merdiven Temizliği', logs: [], subtasks: [] },
     { name: 'Mutfak Açılış Kontrolü', logs: [], subtasks: [] },
   ];
-  const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem('dailyTasks');
-    if (saved) {
-      try {
-        // Tüm alt görevlerin status'unu sıfırla (eski verilerde kalanlar için)
-        const parsed = JSON.parse(saved);
-        return parsed.map(t => ({
-          ...t,
-          subtasks: (t.subtasks || []).map(s => ({ ...s, status: false }))
-        }));
-      } catch {
-        return defaultTasks;
-      }
-    }
-    return defaultTasks;
-  });
+  const [tasks, setTasks] = useState(defaultTasks);
   // Onay bekleyen temizlik kayıtları (localStorage ile paylaş)
   // Onay bekleyen temizlik kayıtları (Firebase ile paylaş)
   const [pendingApprovals, setPendingApprovals] = useState([]);
@@ -104,6 +89,10 @@ function DailyTasks(props) {
   // Hata mesajı için ayrı bir state
   const [errorMsg, setErrorMsg] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0); // Yükleme ilerlemesi için state
+
+  // Alt görev düzenleme state'leri
+  const [editingSubtask, setEditingSubtask] = useState({ taskIdx: null, subIdx: null });
+  const [editSubtaskValue, setEditSubtaskValue] = useState('');
 
   // Derived
   // Kullanıcıya göre filtrele, arama ve tamamlanmamışlar
@@ -125,16 +114,22 @@ function DailyTasks(props) {
   };
 
   // Handlers
-  const handleResetTasks = () => {
-    setTasks(tasks.map(t => ({ ...t, time: '', user: '', approved: false, subtasks: t.subtasks?.map(s => ({...s, status: false})) || [] })));
+  const handleResetTasks = async () => {
+    const resetTasks = tasks.map(t => ({ ...t, time: '', user: '', approved: false }));
+    setTasks(resetTasks);
+    // Firebase'e kaydet
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, resetTasks);
     showCenterToast('Tüm görevler sıfırlandı!');
   };
-  const handleAddTask = (e) => {
+  const handleAddTask = async (e) => {
     e.preventDefault();
     if (!newTask.trim()) return;
     const updated = [...tasks, { name: newTask, user: '', time: '', subtasks: [], approved: false }];
     setTasks(updated);
-    localStorage.setItem('dailyTasks', JSON.stringify(updated));
+    // Firebase'e kaydet
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, updated);
     setNewTask('');
     showCenterToast('Görev eklendi!');
   };
@@ -144,14 +139,25 @@ function DailyTasks(props) {
     setPendingCompleteIdx(idx);
   };
 
-  // Alt görev tamamla
-  const handleCompleteSubtask = (idx, subIdx) => {
-    // Alt görev tamamlanınca sadece status true yapılır, admin onayına gönderilmez
+  // Alt görev tamamla/geri al (toggle)
+  const handleCompleteSubtask = async (idx, subIdx) => {
     const updated = [...tasks];
-    updated[idx].subtasks[subIdx].status = true;
+    const currentStatus = updated[idx].subtasks[subIdx].status;
+    
+    // Status'u toggle et (true ise false, false ise true)
+    updated[idx].subtasks[subIdx].status = !currentStatus;
     setTasks(updated);
-    localStorage.setItem('dailyTasks', JSON.stringify(updated));
-    showCenterToast('Alt görev tamamlandı!');
+    
+    // Firebase'e kaydet
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, updated);
+    
+    // Duruma göre mesaj göster
+    if (!currentStatus) {
+      showCenterToast('Alt görev tamamlandı!');
+    } else {
+      showCenterToast('Alt görev geri alındı!');
+    }
   };
 
   // Fotoğrafı Firebase Storage'a yükle ve download URL'sini döndür
@@ -229,9 +235,12 @@ function DailyTasks(props) {
     };
     updated[idx].logs = [...(updated[idx].logs || []), newLog];
     const subtasksStatusSnapshot = (updated[idx].subtasks || []).map(s => ({ name: s.name, status: s.status }));
+    // Ana görev onaya gönderildikten sonra alt görevleri sıfırla (butonlar yenilensin)
     updated[idx].subtasks = (updated[idx].subtasks || []).map(s => ({ ...s, status: false }));
     setTasks([...updated]);
-    localStorage.setItem('dailyTasks', JSON.stringify([...updated]));
+    // Firebase'e kaydet
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, [...updated]);
     try {
       setErrorMsg('Firebase kaydı yapılıyor...');
       console.log('Firebase push başlıyor');
@@ -320,10 +329,12 @@ function DailyTasks(props) {
     </div>
   );
 
-  // Firebase'den pendingApprovals ve dailyReports'u dinle
+  // Firebase'den pendingApprovals, dailyReports ve tasks'ı dinle
   useEffect(() => {
     const pendingRef = ref(db, 'pendingCleaningApprovals');
     const dailyRef = ref(db, 'dailyTasks');
+    const tasksRef = ref(db, 'dailyTasksConfig'); // Görevler ve alt görevler için yeni ref
+    
     const unsub1 = onValue(pendingRef, (snap) => {
       const arr = [];
       if (snap.exists()) {
@@ -334,6 +345,7 @@ function DailyTasks(props) {
       }
       setPendingApprovals(arr);
     });
+    
     const unsub2 = onValue(dailyRef, (snap) => {
       const arr = [];
       if (snap.exists()) {
@@ -344,9 +356,24 @@ function DailyTasks(props) {
       }
       setDailyReports(arr);
     });
+    
+    const unsub3 = onValue(tasksRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        if (Array.isArray(val) && val.length > 0) {
+          setTasks(val);
+        }
+      } else {
+        // İlk kez çalışıyorsa default görevleri Firebase'e kaydet
+        set(tasksRef, defaultTasks);
+        setTasks(defaultTasks);
+      }
+    });
+    
     return () => {
       unsub1();
       unsub2();
+      unsub3();
     };
   }, []);
 
@@ -365,6 +392,8 @@ function DailyTasks(props) {
         console.error('Service Worker kaydı sırasında hata oluştu:', error);
       });
   }, []);
+
+
 
 
   // Admin onay fonksiyonu (sadece adminler için görünür)
@@ -437,14 +466,7 @@ function DailyTasks(props) {
     await set(dailyRef, newReport);
     await remove(ref(db, `pendingCleaningApprovals/${approval.id}`));
     showCenterToast('Onaylandı ve rapora eklendi!');
-    if (approval.taskIdx !== undefined) {
-      const updatedTasks = [...tasks];
-      if (updatedTasks[approval.taskIdx]) {
-        updatedTasks[approval.taskIdx].subtasks = (updatedTasks[approval.taskIdx].subtasks || []).map(s => ({ ...s, status: false }));
-      }
-      setTasks(updatedTasks);
-      localStorage.setItem('dailyTasks', JSON.stringify(updatedTasks));
-    }
+    // Alt görevlerin durumu artık sıfırlanmayacak - sabit kalacak
   };
 
   // Eksik handler fonksiyonları en üste ekleniyor
@@ -454,10 +476,13 @@ function DailyTasks(props) {
     // ...existing code...
   };
 
-  const handleEditSave = (idx) => {
+  const handleEditSave = async (idx) => {
     const updated = [...tasks];
     updated[idx].name = editValue;
     setTasks(updated);
+    // Firebase'e kaydet
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, updated);
     setEditIdx(null);
     setEditValue('');
     showCenterToast('Görev güncellendi!');
@@ -468,14 +493,16 @@ function DailyTasks(props) {
     setEditValue('');
   };
 
-  const handleAddSubtask = (idx) => {
+  const handleAddSubtask = async (idx) => {
     const val = subtaskInputs[idx];
     if (!val || !val.trim()) return;
     const updated = [...tasks];
     if (!updated[idx].subtasks) updated[idx].subtasks = [];
     updated[idx].subtasks.push({ name: val, status: false });
     setTasks(updated);
-    localStorage.setItem('dailyTasks', JSON.stringify(updated));
+    // Firebase'e kaydet
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, updated);
     setSubtaskInputs({ ...subtaskInputs, [idx]: '' });
     showCenterToast('Alt görev eklendi!');
   };
@@ -483,6 +510,59 @@ function DailyTasks(props) {
   const handleSubtaskInput = (idx, value) => {
     setSubtaskInputs({ ...subtaskInputs, [idx]: value });
   };
+
+  // Alt görevleri manuel sıfırlama (sadece adminler için)
+  const handleResetSubtasks = async () => {
+    const resetTasks = tasks.map(t => ({
+      ...t,
+      subtasks: (t.subtasks || []).map(s => ({ ...s, status: false }))
+    }));
+    setTasks(resetTasks);
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, resetTasks);
+    showCenterToast('Tüm alt görevler sıfırlandı!');
+  };
+
+  // Alt görev silme
+  const handleDeleteSubtask = async (taskIdx, subIdx) => {
+    const updated = [...tasks];
+    updated[taskIdx].subtasks.splice(subIdx, 1);
+    setTasks(updated);
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, updated);
+    showCenterToast('Alt görev silindi!');
+  };
+
+  // Alt görev düzenleme başlat
+  const handleEditSubtask = (taskIdx, subIdx) => {
+    setEditingSubtask({ taskIdx, subIdx });
+    setEditSubtaskValue(tasks[taskIdx].subtasks[subIdx].name);
+  };
+
+  // Alt görev düzenleme kaydet
+  const handleSaveSubtask = async () => {
+    if (!editSubtaskValue.trim()) return;
+    
+    const { taskIdx, subIdx } = editingSubtask;
+    const updated = [...tasks];
+    updated[taskIdx].subtasks[subIdx].name = editSubtaskValue.trim();
+    setTasks(updated);
+    
+    const tasksRef = ref(db, 'dailyTasksConfig');
+    await set(tasksRef, updated);
+    
+    setEditingSubtask({ taskIdx: null, subIdx: null });
+    setEditSubtaskValue('');
+    showCenterToast('Alt görev güncellendi!');
+  };
+
+  // Alt görev düzenleme iptal
+  const handleCancelSubtaskEdit = () => {
+    setEditingSubtask({ taskIdx: null, subIdx: null });
+    setEditSubtaskValue('');
+  };
+
+
 
   // The return block aşağıda güncellendi
   return (
@@ -496,8 +576,8 @@ function DailyTasks(props) {
       )}
       {/* Temizlendi onay modalı */}
       {showConfirm && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding:'10px' }}>
-          <div style={{ background: '#fff', borderRadius: 18, padding: '24px 16px', width: '100%', maxWidth: 370, boxShadow: '0 4px 24px rgba(0,0,0,0.18)', textAlign: 'center', margin:'0 auto' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding:'16px' }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: '24px 16px', width: '100%', maxWidth: 400, boxShadow: '0 4px 24px rgba(0,0,0,0.18)', textAlign: 'center', margin:'0 auto' }}>
             <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 14, color:'#222', letterSpacing:'-0.5px' }}>Görevi tamamladınız mı?</div>
             <div className="mb-3 text-muted" style={{ fontSize: 15, marginBottom:18, color:'#555' }}>
               Bu görev admin onayına gönderilecek.
@@ -544,6 +624,37 @@ function DailyTasks(props) {
         </div>
       )}
       <div className="container-fluid px-1 px-sm-2 px-md-3 my-3">
+        {/* Header with Back Button */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '20px',
+          padding: '15px 20px',
+          background: 'white',
+          borderRadius: '15px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+        }}>
+          <h2 style={{ color: '#2d3748', margin: 0, fontSize: '20px', fontWeight: '700' }}>
+            📋 Günlük Görevler
+          </h2>
+          <button
+            onClick={() => window.history.back()}
+            style={{
+              background: 'transparent',
+              border: '2px solid #5a6c7d',
+              borderRadius: '8px',
+              color: '#5a6c7d',
+              padding: '8px 16px',
+              fontSize: '14px',
+              cursor: 'pointer',
+              fontWeight: '600'
+            }}
+          >
+            ← Ana Menü
+          </button>
+        </div>
+
         {/* Motivasyon kutusu kaldırıldı */}
         <div className="mx-auto w-100" style={{ maxWidth: 1200 }}>
           <div className="mb-4">
@@ -582,24 +693,26 @@ function DailyTasks(props) {
                 <div className="col-12 col-sm-12 col-md-6 col-lg-4" key={task.name + i}>
                   <div className="card h-100 shadow-sm w-100" style={{ ...cardStyle, ...cardBg, ...cardBorder, minWidth: 0 }}>
                     <div className="card-body">
-                      <div className="d-flex align-items-center mb-3">
-                        <span style={{ fontSize: 28, marginRight: 12 }}>{taskTypeIcon}</span>
-                        {isAdmin && editIdx === idx ? (
-                          <div className="input-group input-group-sm">
-                            <input value={editValue} onChange={e => setEditValue(e.target.value)} autoFocus className="form-control" style={{ fontWeight: 700, fontSize: 16, borderRadius: 10 }} />
-                            <button className="btn btn-success" onClick={() => handleEditSave(idx)} title="Kaydet" style={{ borderRadius: 10 }}>✔</button>
-                            <button className="btn btn-secondary" onClick={handleEditCancel} title="Vazgeç" style={{ borderRadius: 10 }}>✖</button>
-                          </div>
-                        ) : (
-                          <span className="fw-bold" style={{ fontSize: 20 }}>{task.name}</span>
-                        )}
-                        <div className="ms-auto d-flex align-items-center gap-2">
+                      <div className="d-flex flex-column flex-sm-row align-items-start align-items-sm-center mb-3 gap-2">
+                        <div className="d-flex align-items-center flex-grow-1" style={{ minWidth: 0 }}>
+                          <span style={{ fontSize: 28, marginRight: 12, flexShrink: 0 }}>{taskTypeIcon}</span>
+                          {isAdmin && editIdx === idx ? (
+                            <div className="input-group input-group-sm w-100">
+                              <input value={editValue} onChange={e => setEditValue(e.target.value)} autoFocus className="form-control" style={{ fontWeight: 700, fontSize: 16, borderRadius: 10, minWidth: 0 }} />
+                              <button className="btn btn-success" onClick={() => handleEditSave(idx)} title="Kaydet" style={{ borderRadius: 10 }}>✔</button>
+                              <button className="btn btn-secondary" onClick={handleEditCancel} title="Vazgeç" style={{ borderRadius: 10 }}>✖</button>
+                            </div>
+                          ) : (
+                            <span className="fw-bold" style={{ fontSize: 18, wordBreak: 'break-word', minWidth: 0 }}>{task.name}</span>
+                          )}
+                        </div>
+                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
                           <button className="btn btn-outline-secondary btn-sm" 
                             onClick={() => handleComplete(idx)} 
-                            style={{ borderRadius: 10 }}
+                            style={{ borderRadius: 10, fontSize: 12, padding: '6px 12px' }}
                             disabled={task.subtasks && task.subtasks.length > 0 && !task.subtasks.some(s => s.status)}
                           >Temizlendi</button>
-                          <button className="btn btn-outline-dark btn-sm" title="QR ile tamamla (yakında)" disabled style={{ borderRadius: 10 }}>QR</button>
+                          <button className="btn btn-outline-dark btn-sm" title="QR ile tamamla (yakında)" disabled style={{ borderRadius: 10, fontSize: 12, padding: '6px 12px' }}>QR</button>
                         </div>
                       </div>
                       <div className="mb-2 d-flex flex-wrap gap-2 align-items-center">
@@ -616,8 +729,69 @@ function DailyTasks(props) {
                         <ul className="list-group mb-2">
                           {task.subtasks.map((sub, subIdx) => (
                             <li key={subIdx} className="list-group-item d-flex justify-content-between align-items-center px-2 py-2" style={{ borderRadius: 8, marginBottom: 4, fontSize: 14 }}>
-                              <span>{sub.name}</span>
-                              {sub.status ? <span className="badge bg-success">Tamamlandı</span> : <button className="btn btn-outline-success btn-sm" onClick={() => handleCompleteSubtask(idx, subIdx)}>Tamamla</button>}
+                              {/* Alt görev düzenleme modu */}
+                              {isAdmin && editingSubtask.taskIdx === idx && editingSubtask.subIdx === subIdx ? (
+                                <div className="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2 w-100">
+                                  <input 
+                                    type="text" 
+                                    className="form-control form-control-sm flex-grow-1" 
+                                    value={editSubtaskValue}
+                                    onChange={e => setEditSubtaskValue(e.target.value)}
+                                    autoFocus
+                                    style={{ fontSize: 12, minWidth: 0 }}
+                                  />
+                                  <div className="d-flex gap-1">
+                                    <button className="btn btn-success btn-sm" onClick={handleSaveSubtask} title="Kaydet" style={{ minWidth: 32 }}>✔</button>
+                                    <button className="btn btn-secondary btn-sm" onClick={handleCancelSubtaskEdit} title="İptal" style={{ minWidth: 32 }}>✖</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2 w-100">
+                                  <span className="flex-grow-1" style={{ wordBreak: 'break-word', minWidth: 0 }}>{sub.name}</span>
+                                  <div className="d-flex align-items-center gap-1 flex-shrink-0">
+                                    {sub.status ? (
+                                      <span 
+                                        className="badge bg-success" 
+                                        style={{ 
+                                          fontSize: 10, 
+                                          cursor: 'pointer',
+                                          userSelect: 'none',
+                                          transition: 'all 0.2s ease'
+                                        }}
+                                        onClick={() => handleCompleteSubtask(idx, subIdx)}
+                                        title="Tıklayarak geri alın"
+                                        onMouseEnter={(e) => e.target.style.opacity = '0.8'}
+                                        onMouseLeave={(e) => e.target.style.opacity = '1'}
+                                      >
+                                        ✓ Tamamlandı
+                                      </span>
+                                    ) : (
+                                      <button className="btn btn-outline-success btn-sm" onClick={() => handleCompleteSubtask(idx, subIdx)} style={{ fontSize: 11, padding: '4px 8px' }}>Tamamla</button>
+                                    )}
+                                    {/* Admin kontrolleri */}
+                                    {isAdmin && (
+                                      <>
+                                        <button 
+                                          className="btn btn-outline-primary btn-sm" 
+                                          onClick={() => handleEditSubtask(idx, subIdx)}
+                                          title="Düzenle"
+                                          style={{ fontSize: 10, padding: '4px 6px', minWidth: 28 }}
+                                        >
+                                          ✏️
+                                        </button>
+                                        <button 
+                                          className="btn btn-outline-danger btn-sm" 
+                                          onClick={() => handleDeleteSubtask(idx, subIdx)}
+                                          title="Sil"
+                                          style={{ fontSize: 10, padding: '4px 6px', minWidth: 28 }}
+                                        >
+                                          🗑️
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -638,78 +812,183 @@ function DailyTasks(props) {
           {/* Admin Panel: Onay Bekleyenler */}
           {isAdmin && (
             <div className="mt-4">
-              <h6 className="mb-3" style={{ fontWeight: 700, fontSize: 18 }}>🛡️ Onay Bekleyen Temizlik Kayıtları</h6>
-              <div className="table-responsive">
-                <table className="table table-sm table-bordered table-hover align-middle" style={{ borderRadius: 12, overflow: 'hidden', background: '#fff', minWidth: 400 }}>
-                  <thead className="table-light">
-                    <tr style={{ fontSize: 16 }}>
-                      <th>Tarih</th>
-                      <th>Saat</th>
-                      <th>Kullanıcı</th>
-                      <th>Görev</th>
-                      <th>Fotoğraf</th>
-                      <th>Onay</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingApprovals.length === 0 && (
-                      <tr><td colSpan={5} className="text-muted">Bekleyen kayıt yok.</td></tr>
-                    )}
-                    {pendingApprovals.map((a, i) => (
-                      <tr key={a.id}>
-                        <td>{a.date || '-'}</td>
-                        <td>{a.time || '-'}</td>
-                        <td>{a.user || '-'}</td>
-                        <td>
-                          {a.taskName}
-                          {(() => {
-                            const task = tasks[a.taskIdx];
-                            if (task && task.subtasks && task.subtasks.length > 0) {
-                              return (
-                                <ul style={{margin:0, paddingLeft:16, fontSize:13}}>
-                                  {task.subtasks.map((sub, si) => {
-                                    const isDone = (task.logs || []).some(log =>
-                                      log.subtaskName === sub.name &&
-                                      log.user === a.user &&
-                                      log.date === a.date &&
-                                      log.time === a.time
-                                    );
-                                    return (
-                                      <li key={si} style={{color: isDone ? '#198754' : '#dc3545'}}>
-                                        {sub.name} {isDone ? '✔️' : '❌'}
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </td>
-                        <td>
-                          {/* Hem eski hem yeni kayıtlar için fotoğraf gösterimi */}
-                          {a.photoURLs && a.photoURLs.length > 0 && a.photoURLs.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              <img src={url} alt="Fotoğraf" style={{width:48, height:48, objectFit:'cover', borderRadius:8, marginRight:4, border:'1px solid #eee'}} />
-                            </a>
-                          ))}
-                          {a.photoURL && (
-                            <a href={a.photoURL} target="_blank" rel="noopener noreferrer">
-                              <img src={a.photoURL} alt="Fotoğraf" style={{width:48, height:48, objectFit:'cover', borderRadius:8, marginRight:4, border:'1px solid #eee'}} />
-                            </a>
-                          )}
-                        </td>
-                        <td>
-                          <button className="btn btn-success btn-sm me-2" onClick={() => handleApprove(a)}>Onayla</button>
-                          <button className="btn btn-danger btn-sm" onClick={async () => {
-                            await remove(ref(db, `pendingCleaningApprovals/${a.id}`));
-                            showCenterToast('Kayıt reddedildi ve silindi!');
-                          }}>Reddet</button>
-                        </td>
+              <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3 gap-2">
+                <h6 className="mb-0" style={{ fontWeight: 700, fontSize: 18 }}>🛡️ Admin Kontrol Paneli</h6>
+                <div className="d-flex flex-wrap gap-2">
+                  <button 
+                    className="btn btn-warning btn-sm" 
+                    onClick={handleResetSubtasks}
+                    title="Tüm alt görevleri sıfırla"
+                    style={{ fontSize: 12, padding: '6px 10px' }}
+                  >
+                    🔄 Alt Görevleri Sıfırla
+                  </button>
+                  <button 
+                    className="btn btn-danger btn-sm" 
+                    onClick={handleResetTasks}
+                    title="Tüm görevleri sıfırla"
+                    style={{ fontSize: 12, padding: '6px 10px' }}
+                  >
+                    🗑️ Tümünü Sıfırla
+                  </button>
+                </div>
+              </div>
+              <h6 className="mb-3" style={{ fontWeight: 700, fontSize: 16 }}>Onay Bekleyen Temizlik Kayıtları</h6>
+              
+              {/* Mobil için kart görünümü, masaüstü için tablo */}
+              <div className="d-none d-md-block">
+                <div className="table-responsive">
+                  <table className="table table-sm table-bordered table-hover align-middle" style={{ borderRadius: 12, overflow: 'hidden', background: '#fff', minWidth: 400 }}>
+                    <thead className="table-light">
+                      <tr style={{ fontSize: 14 }}>
+                        <th>Tarih</th>
+                        <th>Saat</th>
+                        <th>Kullanıcı</th>
+                        <th>Görev</th>
+                        <th>Fotoğraf</th>
+                        <th>Onay</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {pendingApprovals.length === 0 && (
+                        <tr><td colSpan={6} className="text-muted">Bekleyen kayıt yok.</td></tr>
+                      )}
+                      {pendingApprovals.map((a, i) => (
+                        <tr key={a.id}>
+                          <td style={{ fontSize: 12 }}>{a.date || '-'}</td>
+                          <td style={{ fontSize: 12 }}>{a.time || '-'}</td>
+                          <td style={{ fontSize: 12 }}>{a.user || '-'}</td>
+                          <td style={{ fontSize: 12 }}>
+                            {a.taskName}
+                            {(() => {
+                              const task = tasks[a.taskIdx];
+                              if (task && task.subtasks && task.subtasks.length > 0) {
+                                return (
+                                  <ul style={{margin:0, paddingLeft:16, fontSize:11}}>
+                                    {task.subtasks.map((sub, si) => {
+                                      const isDone = (task.logs || []).some(log =>
+                                        log.subtaskName === sub.name &&
+                                        log.user === a.user &&
+                                        log.date === a.date &&
+                                        log.time === a.time
+                                      );
+                                      return (
+                                        <li key={si} style={{color: isDone ? '#198754' : '#dc3545'}}>
+                                          {sub.name} {isDone ? '✔️' : '❌'}
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </td>
+                          <td>
+                            {/* Hem eski hem yeni kayıtlar için fotoğraf gösterimi */}
+                            {a.photoURLs && a.photoURLs.length > 0 && a.photoURLs.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                <img src={url} alt="Fotoğraf" style={{width:40, height:40, objectFit:'cover', borderRadius:6, marginRight:4, border:'1px solid #eee'}} />
+                              </a>
+                            ))}
+                            {a.photoURL && (
+                              <a href={a.photoURL} target="_blank" rel="noopener noreferrer">
+                                <img src={a.photoURL} alt="Fotoğraf" style={{width:40, height:40, objectFit:'cover', borderRadius:6, marginRight:4, border:'1px solid #eee'}} />
+                              </a>
+                            )}
+                          </td>
+                          <td>
+                            <div className="d-flex flex-column gap-1">
+                              <button className="btn btn-success btn-sm" onClick={() => handleApprove(a)} style={{ fontSize: 11, padding: '4px 8px' }}>Onayla</button>
+                              <button className="btn btn-danger btn-sm" onClick={async () => {
+                                await remove(ref(db, `pendingCleaningApprovals/${a.id}`));
+                                showCenterToast('Kayıt reddedildi ve silindi!');
+                              }} style={{ fontSize: 11, padding: '4px 8px' }}>Reddet</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Mobil kart görünümü */}
+              <div className="d-md-none">
+                {pendingApprovals.length === 0 && (
+                  <div className="text-muted text-center p-3">Bekleyen kayıt yok.</div>
+                )}
+                {pendingApprovals.map((a, i) => (
+                  <div key={a.id} className="card mb-3" style={{ borderRadius: 12, border: '1px solid #e3e3e3' }}>
+                    <div className="card-body p-3">
+                      <div className="row g-2 mb-2">
+                        <div className="col-6">
+                          <small className="text-muted">Tarih:</small>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{a.date || '-'}</div>
+                        </div>
+                        <div className="col-6">
+                          <small className="text-muted">Saat:</small>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{a.time || '-'}</div>
+                        </div>
+                      </div>
+                      <div className="mb-2">
+                        <small className="text-muted">Kullanıcı:</small>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{a.user || '-'}</div>
+                      </div>
+                      <div className="mb-2">
+                        <small className="text-muted">Görev:</small>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{a.taskName}</div>
+                        {(() => {
+                          const task = tasks[a.taskIdx];
+                          if (task && task.subtasks && task.subtasks.length > 0) {
+                            return (
+                              <ul style={{margin:'4px 0 0 0', paddingLeft:16, fontSize:11}}>
+                                {task.subtasks.map((sub, si) => {
+                                  const isDone = (task.logs || []).some(log =>
+                                    log.subtaskName === sub.name &&
+                                    log.user === a.user &&
+                                    log.date === a.date &&
+                                    log.time === a.time
+                                  );
+                                  return (
+                                    <li key={si} style={{color: isDone ? '#198754' : '#dc3545'}}>
+                                      {sub.name} {isDone ? '✔️' : '❌'}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      {(a.photoURLs?.length > 0 || a.photoURL) && (
+                        <div className="mb-3">
+                          <small className="text-muted">Fotoğraflar:</small>
+                          <div className="d-flex flex-wrap gap-2 mt-1">
+                            {a.photoURLs && a.photoURLs.length > 0 && a.photoURLs.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                <img src={url} alt="Fotoğraf" style={{width:60, height:60, objectFit:'cover', borderRadius:8, border:'1px solid #eee'}} />
+                              </a>
+                            ))}
+                            {a.photoURL && (
+                              <a href={a.photoURL} target="_blank" rel="noopener noreferrer">
+                                <img src={a.photoURL} alt="Fotoğraf" style={{width:60, height:60, objectFit:'cover', borderRadius:8, border:'1px solid #eee'}} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="d-flex gap-2">
+                        <button className="btn btn-success btn-sm flex-fill" onClick={() => handleApprove(a)}>Onayla</button>
+                        <button className="btn btn-danger btn-sm flex-fill" onClick={async () => {
+                          await remove(ref(db, `pendingCleaningApprovals/${a.id}`));
+                          showCenterToast('Kayıt reddedildi ve silindi!');
+                        }}>Reddet</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

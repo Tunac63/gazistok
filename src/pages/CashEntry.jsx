@@ -10,9 +10,11 @@ import {
   Table,
   Card,
   Alert,
+  Modal,
 } from "react-bootstrap";
-import { db } from "../firebase/config";
-import { ref, get, set } from "firebase/database";
+import { useAuthState } from "react-firebase-hooks/auth";
+import { auth, db } from "../firebase/config";
+import { ref, get, set, remove } from "firebase/database";
 import {
   format,
   parseISO,
@@ -34,8 +36,68 @@ import { CSVLink } from "react-csv";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
+// Soft tasarım stilleri
+const softStyles = {
+  container: {
+    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+    borderRadius: '20px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+    border: 'none',
+    backdropFilter: 'blur(10px)',
+  },
+  card: {
+    borderRadius: '16px',
+    border: 'none',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+    background: 'rgba(255,255,255,0.95)',
+    backdropFilter: 'blur(10px)',
+  },
+  formControl: {
+    borderRadius: '12px',
+    border: '1px solid rgba(0,0,0,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+  },
+  button: {
+    borderRadius: '12px',
+    fontWeight: '600',
+    textTransform: 'none',
+    border: 'none',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+    transition: 'all 0.3s ease',
+  },
+  primaryButton: {
+    background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+    color: 'white',
+  },
+  successButton: {
+    background: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+    color: 'white',
+  },
+  warningButton: {
+    background: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)',
+    color: '#212529',
+  },
+  table: {
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+    border: 'none',
+  },
+  badge: {
+    borderRadius: '8px',
+    padding: '6px 12px',
+    fontWeight: '500',
+    fontSize: '12px',
+  }
+};
+
 
 export default function CashEntry() {
+  // Firebase Auth kullanıcısı
+  const [user] = useAuthState(auth);
+  
   // Ana state'ler
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -55,7 +117,6 @@ export default function CashEntry() {
   const [note, setNote] = useState("");
   const [prevCarry, setPrevCarry] = useState(0);
   const [todayCashCarry, setTodayCashCarry] = useState(0);
-  const [todayVisaCarry, setTodayVisaCarry] = useState(0);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [prevSuccess, setPrevSuccess] = useState("");
@@ -71,31 +132,108 @@ export default function CashEntry() {
   const [requestSent, setRequestSent] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [requesting, setRequesting] = useState(false);
-  // Kullanıcı email veya uid alınmalı, örnek olarak localStorage'dan veya props'tan alınabilir
-  const userEmail = localStorage.getItem("userEmail") || "";
-  const userUid = localStorage.getItem("userUid") || "";
   // Şifre talep fonksiyonu
   // Şifre talebi sadece kayıt oluşturacak, şifre atamayacak
   const handleRequestPassword = async () => {
+    if (!user) {
+      setRequestError("Şifre talep etmek için giriş yapmalısınız!");
+      return;
+    }
+    
     setRequesting(true);
     setRequestError("");
     try {
-      const reqRef = ref(db, `cashPasswordRequests/${userUid || Date.now()}`);
+      // Kullanıcı adını belirle - önce Firebase users koleksiyonundan kontrol et
+      let userName = "Bilinmeyen Kullanıcı";
+      
+      try {
+        // Firebase users koleksiyonundan kullanıcı bilgilerini al
+        const userRef = ref(db, `users/${user.uid}`);
+        const userSnap = await get(userRef);
+        
+        if (userSnap.exists()) {
+          const userData = userSnap.val();
+          console.log("User data from Firebase:", userData);
+          
+          if (userData.name && userData.name.trim() !== "") {
+            userName = userData.name;
+          } else if (userData.email && userData.email.includes("@")) {
+            // Email'in @ sonrası kısmını al (domain'in .com öncesi kısmı)
+            const emailParts = userData.email.split("@");
+            if (emailParts.length > 1) {
+              const domain = emailParts[1]; // örn: "tuna.com"
+              const domainParts = domain.split(".");
+              if (domainParts.length > 0) {
+                userName = domainParts[0]; // örn: "tuna"
+              }
+            }
+          } else if (userData.email) {
+            userName = userData.email;
+          }
+        }
+      } catch (dbError) {
+        console.log("Firebase users collection error:", dbError);
+      }
+      
+      // Eğer Firebase'den bulamazsak, authentication bilgilerini kullan
+      if (userName === "Bilinmeyen Kullanıcı") {
+        if (user.displayName && user.displayName.trim() !== "") {
+          userName = user.displayName;
+        } else if (user.email && user.email.includes("@")) {
+          // Email'in @ sonrası kısmını al (domain'in .com öncesi kısmı)
+          const emailParts = user.email.split("@");
+          if (emailParts.length > 1) {
+            const domain = emailParts[1]; // örn: "tuna.com"
+            const domainParts = domain.split(".");
+            if (domainParts.length > 0) {
+              userName = domainParts[0]; // örn: "tuna"
+            }
+          }
+        } else if (user.email && user.email.trim() !== "") {
+          userName = user.email;
+        } else if (user.uid) {
+          userName = `User_${user.uid.substring(0, 8)}`;
+        }
+      }
+      
+      console.log("Password request - Full user object:", user);
+      console.log("Password request - user.email:", user.email);
+      console.log("Password request - user.displayName:", user.displayName);
+      console.log("Password request - Final userName:", userName);
+      
+      // Email analizi
+      if (user.email && user.email.includes("@")) {
+        const emailParts = user.email.split("@");
+        console.log("Email parts:", emailParts);
+        console.log("Domain part (after @):", emailParts[1]);
+        if (emailParts.length > 1) {
+          const domainParts = emailParts[1].split(".");
+          console.log("Domain parts:", domainParts);
+          console.log("Username from domain (before .com):", domainParts[0]);
+        }
+      }
+      
+      const reqRef = ref(db, `cashPasswordRequests/${user.uid || Date.now()}`);
       await set(reqRef, {
-        user: userEmail || "Bilinmeyen Kullanıcı",
-        email: userEmail,
-        uid: userUid,
+        user: userName, 
+        email: user.email || null,
+        uid: user.uid || null,
+        displayName: user.displayName || null,
         requestTime: Date.now(),
         status: "pending"
       });
       setRequestSent(true);
+      console.log("Password request sent successfully with userName:", userName);
     } catch (err) {
+      console.error("Password request error:", err);
       setRequestError("Talep gönderilemedi. Lütfen tekrar deneyin.");
     }
     setRequesting(false);
   };
   // Modal ve admin işlemleri için state'ler
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [newPassword, setNewPassword] = useState("");
   const [passwordRequests, setPasswordRequests] = useState([]);
@@ -118,20 +256,70 @@ export default function CashEntry() {
   };
 
   const handlePasswordSubmit = async () => {
-    const passSnap = await get(ref(db, "cashEntryPassword"));
-    const realPassword = passSnap.exists() ? passSnap.val() : "";
-    if (passwordInput === realPassword) {
-      setIsAuthenticated(true);
-      setPasswordError("");
-    } else {
-      setPasswordError("❌ Şifre hatalı. Lütfen tekrar deneyin.");
+    try {
+      // Çoklu şifre kontrolü - tüm kullanıcı şifrelerini kontrol et
+      const passwordsSnap = await get(ref(db, "cashEntryPasswords"));
+      const userEmail = localStorage.getItem("userEmail") || "";
+      const userUid = localStorage.getItem("userUid") || "";
+      
+      let isValidPassword = false;
+      
+      if (passwordsSnap.exists()) {
+        const passwords = passwordsSnap.val();
+        // Önce kullanıcının kendi şifresini kontrol et
+        if (userUid && passwords[userUid] === passwordInput) {
+          isValidPassword = true;
+        } else if (userEmail) {
+          // Email'i Firebase path uyumlu hale getir
+          const emailKey = userEmail.replace(/\./g, '_DOT_').replace(/@/g, '_AT_').replace(/[#$[\]]/g, '_');
+          if (passwords[emailKey] === passwordInput) {
+            isValidPassword = true;
+          }
+        } else {
+          // Diğer tüm şifreleri kontrol et (eski sistem uyumluluğu için)
+          Object.values(passwords).forEach(password => {
+            if (password === passwordInput) {
+              isValidPassword = true;
+            }
+          });
+        }
+      }
+      
+      // Eski sistem uyumluluğu - tek şifre kontrolü
+      if (!isValidPassword) {
+        const passSnap = await get(ref(db, "cashEntryPassword"));
+        const realPassword = passSnap.exists() ? passSnap.val() : "";
+        if (passwordInput === realPassword) {
+          isValidPassword = true;
+        }
+      }
+      
+      if (isValidPassword) {
+        setIsAuthenticated(true);
+        setPasswordError("");
+      } else {
+        setPasswordError("❌ Şifre hatalı. Lütfen tekrar deneyin.");
+      }
+    } catch (error) {
+      console.error("Şifre kontrolü hatası:", error);
+      setPasswordError("❌ Şifre kontrol edilirken hata oluştu.");
     }
   };
 
   useEffect(() => {
     (async () => {
-      const snap = await get(ref(db, "cashEntryPassword"));
-      if (!snap.exists()) setIsAuthenticated(true);
+      try {
+        // Çoklu şifre sistemini kontrol et
+        const passwordsSnap = await get(ref(db, "cashEntryPasswords"));
+        const singlePasswordSnap = await get(ref(db, "cashEntryPassword"));
+        
+        // Eğer hiç şifre yoksa direkt giriş yap
+        if (!passwordsSnap.exists() && !singlePasswordSnap.exists()) {
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error("Şifre kontrolü hatası:", error);
+      }
       setCheckingPass(false);
     })();
   }, []);
@@ -203,16 +391,11 @@ export default function CashEntry() {
 
   useEffect(() => {
     const ci = parseFloat(cashIn) || 0;
-    const vi = parseFloat(visaIn) || 0;
     const cExp = approvedExpenses
       .filter((e) => e.type === "cash")
       .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    const vExp = approvedExpenses
-      .filter((e) => e.type === "visa")
-      .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     setTodayCashCarry(prevCarry + ci - cExp);
-    setTodayVisaCarry(vi - vExp);
-  }, [prevCarry, cashIn, visaIn, approvedExpenses]);
+  }, [prevCarry, cashIn, approvedExpenses]);
 
   const allowPrev = allRecords.length === 0;
 
@@ -270,7 +453,6 @@ export default function CashEntry() {
       adisyonCount: parseInt(adisyonCount) || 0,
       note,
       todayCashCarry,
-      todayVisaCarry,
     });
     const snap = await get(ref(db, "cashRecords"));
     const recs = [];
@@ -407,7 +589,34 @@ export default function CashEntry() {
     .filter((e) => e.type === "visa")
     .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
 
-  // Admin şifreyi elle belirleyip onaylayacak, hem ortak şifreyi hem talep kaydını güncelleyecek
+  // Modal açacak fonksiyon
+  const handleDeleteRecord = (record) => {
+    setRecordToDelete(record);
+    setShowDeleteModal(true);
+  };
+
+  // Gerçek silme işlemi
+  const confirmDeleteRecord = async () => {
+    if (!recordToDelete) return;
+
+    try {
+      // Firebase'den sil
+      await remove(ref(db, `cashRecords/${recordToDelete.date}`));
+      
+      // Local state'i güncelle
+      setAllRecords(prev => prev.filter(r => r.date !== recordToDelete.date));
+      
+      setSuccessMessage(`${format(parseISO(recordToDelete.date), "dd/MM/yyyy")} tarihli kayıt başarıyla silindi.`);
+      
+      // Modal'ı kapat
+      setShowDeleteModal(false);
+      setRecordToDelete(null);
+    } catch (error) {
+      console.error("Silme hatası:", error);
+      alert("Kayıt silinirken hata oluştu!");
+    }
+  };
+
   const handleAssignPassword = async () => {
     if (!selectedRequest || !newPassword) return;
     // Ortak şifreyi güncelle
@@ -433,7 +642,38 @@ export default function CashEntry() {
   };
 
   return (
-    <Container className="my-4 bg-light p-4 rounded">
+    <Container className="my-4 p-4" style={softStyles.container}>
+      {/* Header with Back Button */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '20px',
+        padding: '15px 20px',
+        background: 'white',
+        borderRadius: '15px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+      }}>
+        <h2 style={{ color: '#2d3748', margin: 0, fontSize: '20px', fontWeight: '700' }}>
+          💰 Kasa Defteri
+        </h2>
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            background: 'transparent',
+            border: '2px solid #5a6c7d',
+            borderRadius: '8px',
+            color: '#5a6c7d',
+            padding: '8px 16px',
+            fontSize: '14px',
+            cursor: 'pointer',
+            fontWeight: '600'
+          }}
+        >
+          ← Ana Menü
+        </button>
+      </div>
+
       {/* Kasa Defteri Ana İçerik */}
       {!showForm ? (
         <>
@@ -441,130 +681,245 @@ export default function CashEntry() {
             <Alert
               variant="success"
               dismissible
+              style={{
+                borderRadius: '12px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #d1edff 0%, #a8dadc 100%)',
+                color: '#155724',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
+              }}
               onClose={() => setSuccessMessage("")}
             >
               {successMessage}
             </Alert>
           )}
-          <Row className="mb-3 align-items-center">
+          <Row className="mb-4 align-items-center">
             <Col>
-              <h4 style={{ color: "#155724" }}>Gelişmiş Kasa Özeti</h4>
+              <h4 style={{ 
+                color: "#2c3e50",
+                fontWeight: "600",
+                fontSize: "24px",
+                marginBottom: "8px",
+                background: 'linear-gradient(135deg, #2c3e50 0%, #3498db 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                💰 Kasa Defteri
+              </h4>
+              <p style={{ color: "#6c757d", fontSize: "14px", margin: 0 }}>
+                Günlük gelir ve gider takibi
+              </p>
             </Col>
             <Col xs="auto">
-              <Button {...hoverGreen} variant="success" onClick={handleNew}>
-                Yeni Kasa Ekle
+              <Button 
+                variant="primary" 
+                onClick={handleNew}
+                style={{
+                  ...softStyles.button,
+                  ...softStyles.primaryButton,
+                  padding: '10px 20px'
+                }}
+              >
+                ➕ Yeni Kasa Ekle
               </Button>
             </Col>
           </Row>
 
           {/* Date filters */}
-          <Row className="g-3 mb-3">
-            <Col xs={12} md={4}>
-              <Form.Label>Başlangıç Tarihi</Form.Label>
-              <Form.Control
-                type="date"
-                value={filterFrom}
-                onChange={(e) => {
-                  setFilterFrom(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Form.Label>Bitiş Tarihi</Form.Label>
-              <Form.Control
-                type="date"
-                value={filterTo}
-                onChange={(e) => {
-                  setFilterTo(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-            </Col>
-            <Col xs={12} md={4}>
-              <Form.Label>Ara (Not/Ciro)</Form.Label>
-              <Form.Control
-                placeholder="Ara..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-            </Col>
-          </Row>
+          <Card style={{...softStyles.card, marginBottom: '20px'}}>
+            <Card.Body style={{padding: '20px'}}>
+              <h6 style={{marginBottom: '16px', color: '#495057', fontWeight: '600'}}>
+                📅 Tarih Filtreleri
+              </h6>
+              <Row className="g-3">
+                <Col xs={12} md={4}>
+                  <Form.Label style={{fontSize: '13px', fontWeight: '500', color: '#6c757d'}}>
+                    Başlangıç Tarihi
+                  </Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={filterFrom}
+                    style={softStyles.formControl}
+                    onChange={(e) => {
+                      setFilterFrom(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </Col>
+                <Col xs={12} md={4}>
+                  <Form.Label style={{fontSize: '13px', fontWeight: '500', color: '#6c757d'}}>
+                    Bitiş Tarihi
+                  </Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={filterTo}
+                    style={softStyles.formControl}
+                    onChange={(e) => {
+                      setFilterTo(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </Col>
+                <Col xs={12} md={4}>
+                  <Form.Label style={{fontSize: '13px', fontWeight: '500', color: '#6c757d'}}>
+                    🔍 Ara (Not/Ciro)
+                  </Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Arama yapın..."
+                    value={searchTerm}
+                    style={softStyles.formControl}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
 
           {/* Export & Chart */}
-          <Row className="mb-4">
-            <Col xs="auto">
-              <CSVLink
-                data={filtered}
-                headers={[
-                  { label: "Tarih", key: "date" },
-                  { label: "Nakit", key: "cashIn" },
-                  { label: "Visa", key: "visaIn" },
-                  { label: "Ciro", key: "totalSale" },
-                  { label: "Not", key: "note" },
-                ]}
-                filename="kasa_defteri.csv"
-                className="btn btn-outline-primary me-2"
-              >
-                CSV İndir
-              </CSVLink>
-              <Button
-                variant="outline-danger"
-                onClick={() => {
-                  const doc = new jsPDF();
-                  doc.text("Kasa Defteri", 14, 20);
-                  doc.autoTable({
-                    startY: 30,
-                    head: [["Tarih", "Nakit", "Visa", "Ciro", "Not"]],
-                    body: filtered.map((r) => [
-                      format(parseISO(r.date), "dd/MM/yyyy"),
-                      fmt(r.cashIn),
-                      fmt(r.visaIn),
-                      fmt(r.totalSale),
-                      r.note,
-                    ]),
-                  });
-                  doc.save("kasa_defteri.pdf");
-                }}
-              >
-                PDF İndir
-              </Button>
-            </Col>
-            <Col>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="ciro"
-                    stroke="#8884d8"
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </Col>
-          </Row>
+          <Card style={{...softStyles.card, marginBottom: '20px'}}>
+            <Card.Body style={{padding: '20px'}}>
+              <Row className="align-items-center">
+                <Col>
+                  <h6 style={{marginBottom: '8px', color: '#495057', fontWeight: '600'}}>
+                    📊 Raporlar ve Analiz
+                  </h6>
+                  <p style={{fontSize: '13px', color: '#6c757d', margin: 0}}>
+                    Verilerinizi dışa aktarın ve analiz edin
+                  </p>
+                </Col>
+                <Col xs="auto">
+                  <div className="d-flex gap-2 flex-wrap">
+                    <CSVLink
+                      data={filtered}
+                      headers={[
+                        { label: "Tarih", key: "date" },
+                        { label: "Nakit", key: "cashIn" },
+                        { label: "Visa", key: "visaIn" },
+                        { label: "Nakit Masraf", key: "cashExp" },
+                        { label: "Kart Masraf", key: "visaExp" },
+                        { label: "Ciro", key: "totalSale" },
+                        { label: "Not", key: "note" },
+                      ]}
+                      filename="kasa_defteri.csv"
+                      className="btn"
+                      style={{
+                        ...softStyles.button,
+                        background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+                        color: 'white',
+                        textDecoration: 'none',
+                        padding: '8px 16px',
+                        fontSize: '13px'
+                      }}
+                    >
+                      📄 CSV İndir
+                    </CSVLink>
+                    <Button
+                      variant="outline-danger"
+                      style={{
+                        ...softStyles.button,
+                        background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '8px 16px',
+                        fontSize: '13px'
+                      }}
+                      onClick={() => {
+                        const doc = new jsPDF();
+                        doc.text("Kasa Defteri", 14, 20);
+                        doc.autoTable({
+                          startY: 30,
+                          head: [["Tarih", "Nakit", "Visa", "Nakit Masraf", "Kart Masraf", "Ciro", "Not"]],
+                          body: filtered.map((r) => [
+                            format(parseISO(r.date), "dd/MM/yyyy"),
+                            fmt(r.cashIn),
+                            fmt(r.visaIn),
+                            fmt(r.cashExp || 0),
+                            fmt(r.visaExp || 0),
+                            fmt(r.totalSale),
+                            r.note,
+                          ]),
+                        });
+                        doc.save("kasa_defteri.pdf");
+                      }}
+                    >
+                      📋 PDF İndir
+                    </Button>
+                  </div>
+                </Col>
+              </Row>
+              
+              {/* Chart */}
+              <div style={{marginTop: '20px'}}>
+                <h6 style={{marginBottom: '16px', color: '#495057', fontWeight: '600'}}>
+                  📈 Gelir Trendi
+                </h6>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
+                    <XAxis dataKey="date" stroke="#6c757d" fontSize={12} />
+                    <YAxis stroke="#6c757d" fontSize={12} />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        borderRadius: '8px',
+                        border: 'none',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="ciro"
+                      stroke="#007bff"
+                      strokeWidth={3}
+                      dot={{ fill: '#007bff', strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6, stroke: '#007bff', strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </Card.Body>
+          </Card>
 
           {/* Summary Cards */}
-          <Row className="g-2 mb-4">
+          <Row className="g-3 mb-4">
             {[
-              ["Nakit", `₺${fmt(sumCashIn)}`],
-              ["Visa", `₺${fmt(sumVisaIn)}`],
-              ["Nakit Gider", `₺${fmt(sumCashExp)}`],
-              ["Visa Gider", `₺${fmt(sumVisaExp)}`],
-              ["Toplam Ciro", `₺${fmt(turnover)}`],
-            ].map(([t, v], i) => (
-              <Col xs={6} sm={4} md={2} key={i} className="mb-2">
-                <Card border="primary" className="h-100 text-center">
-                  <Card.Body className="py-2">
-                    <div className="small text-secondary">{t}</div>
-                    <div className="h5">{v}</div>
+              ["💰 Nakit", `₺${fmt(sumCashIn)}`, "#28a745"],
+              ["💳 Visa", `₺${fmt(sumVisaIn)}`, "#007bff"],
+              ["📤 Nakit Gider", `₺${fmt(sumCashExp)}`, "#dc3545"],
+              ["📤 Visa Gider", `₺${fmt(sumVisaExp)}`, "#dc3545"],
+              ["📊 Toplam Ciro", `₺${fmt(turnover)}`, "#6f42c1"],
+            ].map(([title, value, color], i) => (
+              <Col xs={6} sm={4} md key={i}>
+                <Card 
+                  className="h-100 text-center border-0"
+                  style={{
+                    ...softStyles.card,
+                    background: `linear-gradient(135deg, ${color}15 0%, ${color}08 100%)`,
+                    borderLeft: `4px solid ${color}`
+                  }}
+                >
+                  <Card.Body style={{padding: '16px'}}>
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#6c757d',
+                      fontWeight: '500',
+                      marginBottom: '8px'
+                    }}>
+                      {title}
+                    </div>
+                    <div style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: color,
+                      marginBottom: '4px'
+                    }}>
+                      {value}
+                    </div>
                   </Card.Body>
                 </Card>
               </Col>
@@ -572,53 +927,221 @@ export default function CashEntry() {
           </Row>
 
           {/* Paginated Table */}
-          <Card className="shadow-sm mb-4">
-            <Card.Header className="bg-primary text-white">
-              Aylık Kasa Defteri
+          <Card style={{...softStyles.card, ...softStyles.table}} className="mb-4">
+            <Card.Header style={{
+              background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+              color: 'white',
+              borderRadius: '12px 12px 0 0',
+              padding: '16px 20px',
+              border: 'none'
+            }}>
+              <div className="d-flex align-items-center">
+                <span style={{fontSize: '16px', fontWeight: '600'}}>
+                  📋 Aylık Kasa Defteri
+                </span>
+                <span style={{
+                  marginLeft: 'auto',
+                  fontSize: '13px',
+                  opacity: '0.9'
+                }}>
+                  {filtered.length} kayıt
+                </span>
+              </div>
             </Card.Header>
             <Card.Body className="p-0">
-              <Table striped hover responsive className="mb-0">
-                <thead className="table-light">
+              <Table hover responsive className="mb-0" style={{borderRadius: '0 0 12px 12px'}}>
+                <thead style={{
+                  background: 'linear-gradient(135deg, #495057 0%, #6c757d 100%)',
+                  color: 'white'
+                }}>
                   <tr>
-                    <th>Tarih</th>
-                    <th>Nakit</th>
-                    <th>Visa</th>
-                    <th>Ciro</th>
-                    <th>Not</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none'
+                    }}>📅 Tarih</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none'
+                    }}>💰 Nakit</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none'
+                    }}>💳 Visa</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none'
+                    }}>💰 Nakit Masraf</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none'
+                    }}>💳 Kart Masraf</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none'
+                    }}>📊 Ciro</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none'
+                    }}>📝 Not</th>
+                    <th style={{
+                      padding: '12px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: 'none',
+                      width: '100px'
+                    }}>⚙️ İşlemler</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pageData.map((r) => (
-                    <tr key={r.date}>
-                      <td>{format(parseISO(r.date), "dd/MM/yyyy")}</td>
-                      <td>₺{fmt(r.cashIn)}</td>
-                      <td>₺{fmt(r.visaIn)}</td>
-                      <td>₺{fmt(r.totalSale)}</td>
-                      <td>{r.note}</td>
+                  {pageData.map((r, index) => (
+                    <tr key={r.date} style={{
+                      backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8f9fa',
+                      transition: 'all 0.2s ease',
+                      borderBottom: index === pageData.length - 1 ? 'none' : '1px solid rgba(0,0,0,0.05)'
+                    }}>
+                      <td style={{
+                        padding: '12px 16px',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        color: '#495057',
+                        border: 'none'
+                      }}>
+                        {format(parseISO(r.date), "dd/MM/yyyy")}
+                      </td>
+                      <td style={{
+                        padding: '12px 16px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#28a745',
+                        border: 'none'
+                      }}>
+                        ₺{fmt(r.cashIn)}
+                      </td>
+                      <td style={{
+                        padding: '12px 16px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#007bff',
+                        border: 'none'
+                      }}>
+                        ₺{fmt(r.visaIn)}
+                      </td>
+                      <td style={{
+                        padding: '12px 16px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#dc3545',
+                        border: 'none'
+                      }}>
+                        ₺{fmt(r.cashExp || 0)}
+                      </td>
+                      <td style={{
+                        padding: '12px 16px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#fd7e14',
+                        border: 'none'
+                      }}>
+                        ₺{fmt(r.visaExp || 0)}
+                      </td>
+                      <td style={{
+                        padding: '12px 16px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#6f42c1',
+                        border: 'none'
+                      }}>
+                        ₺{fmt(r.totalSale)}
+                      </td>
+                      <td style={{
+                        padding: '12px 16px',
+                        fontSize: '13px',
+                        color: '#6c757d',
+                        maxWidth: '200px',
+                        wordBreak: 'break-word',
+                        border: 'none'
+                      }}>
+                        {r.note}
+                      </td>
+                      <td style={{
+                        padding: '12px 16px',
+                        border: 'none'
+                      }}>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          style={{
+                            ...softStyles.button,
+                            background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                            color: 'white',
+                            border: 'none',
+                            fontSize: '11px',
+                            padding: '4px 8px'
+                          }}
+                          onClick={() => handleDeleteRecord(r)}
+                        >
+                          🗑️
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </Table>
             </Card.Body>
-            <Card.Footer className="d-flex justify-content-between align-items-center">
-              <div>
-                Sayfa {currentPage} / {pageCount}
+            <Card.Footer style={{
+              backgroundColor: '#f8f9fa',
+              borderRadius: '0 0 12px 12px',
+              padding: '12px 20px',
+              border: 'none',
+              borderTop: '1px solid #dee2e6'
+            }} className="d-flex justify-content-between align-items-center">
+              <div style={{fontSize: '13px', color: '#6c757d'}}>
+                Sayfa {currentPage} / {pageCount} • Toplam {filtered.length} kayıt
               </div>
-              <div>
+              <div className="d-flex gap-2">
                 <Button
                   size="sm"
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage((p) => p - 1)}
-                  className="me-2"
+                  style={{
+                    ...softStyles.button,
+                    background: currentPage === 1 ? '#e9ecef' : 'linear-gradient(135deg, #6c757d 0%, #495057 100%)',
+                    color: currentPage === 1 ? '#6c757d' : 'white',
+                    border: 'none',
+                    padding: '6px 12px',
+                    fontSize: '12px'
+                  }}
                 >
-                  Önceki
+                  ← Önceki
                 </Button>
                 <Button
                   size="sm"
                   disabled={currentPage === pageCount}
                   onClick={() => setCurrentPage((p) => p + 1)}
+                  style={{
+                    ...softStyles.button,
+                    background: currentPage === pageCount ? '#e9ecef' : 'linear-gradient(135deg, #6c757d 0%, #495057 100%)',
+                    color: currentPage === pageCount ? '#6c757d' : 'white',
+                    border: 'none',
+                    padding: '6px 12px',
+                    fontSize: '12px'
+                  }}
                 >
-                  Sonraki
+                  Sonraki →
                 </Button>
               </div>
             </Card.Footer>
@@ -628,252 +1151,679 @@ export default function CashEntry() {
         <>
           {prevSuccess && (
             <Alert
-              variant="info"
+              variant="success"
               dismissible
+              style={{
+                borderRadius: '12px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)',
+                color: '#155724',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                marginBottom: '20px'
+              }}
               onClose={() => setPrevSuccess("")}
             >
-              {prevSuccess}
+              ✅ {prevSuccess}
             </Alert>
           )}
-          <Row className="mb-3 align-items-center">
+          <Row className="mb-4 align-items-center">
             <Col xs={12} md={4}>
+              <Form.Label style={{fontSize: '13px', fontWeight: '500', color: '#6c757d', marginBottom: '6px'}}>
+                📅 Tarih Seçimi
+              </Form.Label>
               <Form.Control
                 type="date"
                 value={entryDate}
+                style={{
+                  ...softStyles.formControl,
+                  fontSize: '16px',
+                  padding: '12px'
+                }}
                 onChange={(e) => setEntryDate(e.target.value)}
               />
             </Col>
-            <Col xs={12} md={8} className="text-md-end mt-2 mt-md-0">
+            <Col xs={12} md={8} className="text-md-end mt-3 mt-md-0">
               <Button
                 variant="outline-secondary"
+                style={{
+                  ...softStyles.button,
+                  background: 'linear-gradient(135deg, #6c757d 0%, #495057 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 20px'
+                }}
                 onClick={() => setShowForm(false)}
               >
-                Vazgeç
+                ← Vazgeç
               </Button>
             </Col>
           </Row>
 
-          <Form
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveRecord();
-            }}
-          >
-            <Row className="g-2 align-items-end mb-3">
-              <Col xs={12} sm={6} md={2}>
-                <Form.Label>Önceki Devir</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    type="number"
-                    value={prevValue}
-                    onChange={(e) => setPrevValue(e.target.value)}
-                    disabled={!allowPrev}
+          <Card style={{...softStyles.card, marginBottom: '20px'}}>
+            <Card.Body style={{padding: '24px'}}>
+              <h5 style={{
+                ...softStyles.heading,
+                marginBottom: '20px',
+                fontSize: '18px',
+                color: '#495057'
+              }}>
+                💰 Günlük Kasa Bilgileri
+              </h5>
+              
+              <Form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveRecord();
+                }}
+              >
+                <Row className="g-4 mb-4">
+                  <Col xs={12} sm={6} lg={4}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(0,0,0,0.05)'
+                    }}>
+                      <Form.Label style={{fontSize: '13px', fontWeight: '600', color: '#495057', marginBottom: '8px'}}>
+                        💵 Önceki Devir
+                      </Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type="number"
+                          value={prevValue}
+                          onChange={(e) => setPrevValue(e.target.value)}
+                          disabled={!allowPrev}
+                          style={{
+                            ...softStyles.formControl,
+                            ...((!allowPrev) ? { background: "#e9ecef", color: '#6c757d' } : {}),
+                            fontSize: "16px",
+                            fontWeight: '600'
+                          }}
+                        />
+                        <InputGroup.Text style={{
+                          background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                          border: '1px solid rgba(0,0,0,0.1)',
+                          color: '#495057',
+                          fontWeight: '600'
+                        }}>₺</InputGroup.Text>
+                        {!allowPrev && <InputGroup.Text style={{
+                          background: 'linear-gradient(135deg, #ffc107 0%, #fd7e14 100%)',
+                          border: 'none',
+                          color: 'white'
+                        }}>🔒</InputGroup.Text>}
+                      </InputGroup>
+                      {allowPrev && (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          className="mt-2 w-100"
+                          style={{
+                            ...softStyles.button,
+                            background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                            color: 'white',
+                            border: 'none',
+                            fontSize: '13px'
+                          }}
+                          onClick={savePrev}
+                        >
+                          ✅ Kaydet
+                        </Button>
+                      )}
+                      {error && <div className="text-danger small mt-1">{error}</div>}
+                    </div>
+                  </Col>
+
+                  <Col xs={12} sm={6} lg={4}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #d1edff 0%, #a8dadc 100%)',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(0,0,0,0.05)'
+                    }}>
+                      <Form.Label style={{fontSize: '13px', fontWeight: '600', color: '#495057', marginBottom: '8px'}}>
+                        💸 Nakit Satış
+                      </Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type="number"
+                          value={cashIn}
+                          onChange={(e) => setCashIn(e.target.value)}
+                          style={{
+                            ...softStyles.formControl,
+                            fontSize: "16px",
+                            fontWeight: '600'
+                          }}
+                        />
+                        <InputGroup.Text style={{
+                          background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                          border: 'none',
+                          color: 'white',
+                          fontWeight: '600'
+                        }}>₺</InputGroup.Text>
+                      </InputGroup>
+                    </div>
+                  </Col>
+
+                  <Col xs={12} sm={6} lg={4}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(0,0,0,0.05)'
+                    }}>
+                      <Form.Label style={{fontSize: '13px', fontWeight: '600', color: '#495057', marginBottom: '8px'}}>
+                        💳 Visa Satış
+                      </Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type="number"
+                          value={visaIn}
+                          onChange={(e) => setVisaIn(e.target.value)}
+                          style={{
+                            ...softStyles.formControl,
+                            fontSize: "16px",
+                            fontWeight: '600'
+                          }}
+                        />
+                        <InputGroup.Text style={{
+                          background: 'linear-gradient(135deg, #007bff 0%, #6f42c1 100%)',
+                          border: 'none',
+                          color: 'white',
+                          fontWeight: '600'
+                        }}>₺</InputGroup.Text>
+                      </InputGroup>
+                    </div>
+                  </Col>
+                </Row>
+
+                <Row className="g-4 mb-4">
+                  <Col xs={12} sm={6}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(0,0,0,0.05)'
+                    }}>
+                      <Form.Label style={{fontSize: '13px', fontWeight: '600', color: '#495057', marginBottom: '8px'}}>
+                        💰 Toplam Ciro
+                      </Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          readOnly
+                          value={`₺${fmt(
+                            (parseFloat(cashIn) || 0) + (parseFloat(visaIn) || 0)
+                          )}`}
+                          style={{
+                            ...softStyles.formControl,
+                            fontSize: "18px",
+                            fontWeight: '700',
+                            background: 'rgba(255,255,255,0.8)',
+                            color: '#495057',
+                            textAlign: 'center'
+                          }}
+                        />
+                      </InputGroup>
+                    </div>
+                  </Col>
+
+                  <Col xs={12} sm={6}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(0,0,0,0.05)'
+                    }}>
+                      <Form.Label style={{fontSize: '13px', fontWeight: '600', color: '#495057', marginBottom: '8px'}}>
+                        📄 Adisyon Sayısı
+                      </Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type="number"
+                          value={adisyonCount}
+                          onChange={(e) => setAdisyonCount(e.target.value)}
+                          style={{
+                            ...softStyles.formControl,
+                            fontSize: "16px",
+                            fontWeight: '600'
+                          }}
+                        />
+                        <InputGroup.Text style={{
+                          background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                          border: 'none',
+                          color: 'white',
+                          fontWeight: '600'
+                        }}>adet</InputGroup.Text>
+                      </InputGroup>
+                    </div>
+                  </Col>
+                </Row>
+
+                <div className="d-grid">
+                  <Button 
+                    type="submit" 
                     style={{
-                      ...((!allowPrev) ? { background: "#e9ecef" } : {}),
-                      minHeight: "48px",
-                      fontSize: "16px"
+                      ...softStyles.button,
+                      ...softStyles.primaryButton,
+                      padding: '16px',
+                      fontSize: '16px',
+                      fontWeight: '600'
                     }}
-                  />
-                  <InputGroup.Text style={{ minHeight: "48px" }}>₺</InputGroup.Text>
-                  {!allowPrev && <InputGroup.Text style={{ minHeight: "48px" }}>🔒</InputGroup.Text>}
-                </InputGroup>
-                {allowPrev && (
-                  <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    className="mt-1 w-100"
-                    onClick={savePrev}
-                    {...hoverGreen}
                   >
-                    Kaydet
+                    💾 Kaydet
                   </Button>
-                )}
-                {error && <div className="text-danger small">{error}</div>}
-              </Col>
+                </div>
+              </Form>
+            </Card.Body>
+          </Card>
 
-              <Col xs={12} sm={6} md={2}>
-                <Form.Label>Nakit Satış</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    type="number"
-                    value={cashIn}
-                    onChange={(e) => setCashIn(e.target.value)}
-                    style={{ minHeight: "48px", fontSize: "16px" }}
-                  />
-                  <InputGroup.Text style={{ minHeight: "48px" }}>₺</InputGroup.Text>
-                </InputGroup>
-              </Col>
-
-              <Col xs={12} sm={6} md={2}>
-                <Form.Label>Visa Satış</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    type="number"
-                    value={visaIn}
-                    onChange={(e) => setVisaIn(e.target.value)}
-                    style={{ minHeight: "48px", fontSize: "16px" }}
-                  />
-                  <InputGroup.Text style={{ minHeight: "48px" }}>₺</InputGroup.Text>
-                </InputGroup>
-              </Col>
-
-              <Col xs={12} sm={6} md={2}>
-                <Form.Label>Toplam Ciro</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    readOnly
-                    value={`₺${fmt(
-                      (parseFloat(cashIn) || 0) + (parseFloat(visaIn) || 0)
-                    )}`}
-                    style={{ minHeight: "48px", fontSize: "16px", backgroundColor: "#f8f9fa" }}
-                  />
-                </InputGroup>
-              </Col>
-
-              <Col xs={12} sm={6} md={2}>
-                <Form.Label>Adisyon</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    type="number"
-                    value={adisyonCount}
-                    onChange={(e) => setAdisyonCount(e.target.value)}
-                    style={{ minHeight: "48px", fontSize: "16px" }}
-                  />
-                </InputGroup>
-              </Col>
-
-              <Col xs={12} sm={6} md={2} className="d-grid">
-                <Button type="submit" variant="dark" {...hoverGreen}>
-                  Kaydet
-                </Button>
-              </Col>
-            </Row>
-          </Form>
-
-          <h5>Gider Detayları</h5>
-          <Card className="shadow-sm mb-3">
-            <Card.Body>
+          <h5 style={{
+            ...softStyles.heading,
+            marginBottom: '16px',
+            fontSize: '20px',
+            color: '#495057'
+          }}>
+            💸 Gider Detayları
+          </h5>
+          <Card style={{...softStyles.card, marginBottom: '20px'}}>
+            <Card.Body style={{padding: '20px'}}>
               {pendingExpenses.map((e, i) => (
                 <div
                   key={i}
-                  className="mb-2 row gx-2 gy-2 align-items-stretch"
-                  style={{ flexWrap: 'wrap' }}
+                  className="mb-3 p-3 rounded-3"
+                  style={{
+                    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                    border: '1px solid rgba(0,0,0,0.05)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+                  }}
                 >
-                  <div className="col-12 col-md">
-                    <Form.Control
-                      placeholder="Açıklama"
-                      value={e.desc}
-                      onChange={(ev) => updPending(i, "desc", ev.target.value)}
-                    />
-                  </div>
-                  <div className="col-6 col-md-auto">
-                    <Form.Select
-                      value={e.type}
-                      onChange={(ev) => updPending(i, "type", ev.target.value)}
-                    >
-                      <option value="cash">Nakit</option>
-                      <option value="visa">Kart</option>
-                    </Form.Select>
-                  </div>
-                  <div className="col-6 col-md-auto">
-                    <Form.Control
-                      type="number"
-                      placeholder="Tutar"
-                      value={e.amount}
-                      onChange={(ev) => updPending(i, "amount", ev.target.value)}
-                    />
-                  </div>
-                  <div className="col-12 col-md-auto d-grid">
-                    <Button variant="outline-danger" onClick={() => remPending(i)}>
-                      Sil
-                    </Button>
+                  <div className="row g-3 align-items-center">
+                    <div className="col-12 col-md-5">
+                      <Form.Label style={{fontSize: '13px', fontWeight: '500', color: '#6c757d', marginBottom: '6px'}}>
+                        Açıklama
+                      </Form.Label>
+                      <Form.Control
+                        placeholder="Gider açıklaması..."
+                        value={e.desc}
+                        style={{
+                          ...softStyles.formControl,
+                          fontSize: '14px'
+                        }}
+                        onChange={(ev) => updPending(i, "desc", ev.target.value)}
+                      />
+                    </div>
+                    <div className="col-6 col-md-2">
+                      <Form.Label style={{fontSize: '13px', fontWeight: '500', color: '#6c757d', marginBottom: '6px'}}>
+                        Tür
+                      </Form.Label>
+                      <Form.Select
+                        value={e.type}
+                        style={{
+                          ...softStyles.formControl,
+                          fontSize: '14px'
+                        }}
+                        onChange={(ev) => updPending(i, "type", ev.target.value)}
+                      >
+                        <option value="cash">💵 Nakit</option>
+                        <option value="visa">💳 Kart</option>
+                      </Form.Select>
+                    </div>
+                    <div className="col-6 col-md-3">
+                      <Form.Label style={{fontSize: '13px', fontWeight: '500', color: '#6c757d', marginBottom: '6px'}}>
+                        Tutar
+                      </Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type="number"
+                          placeholder="0.00"
+                          value={e.amount}
+                          style={{
+                            ...softStyles.formControl,
+                            fontSize: '14px'
+                          }}
+                          onChange={(ev) => updPending(i, "amount", ev.target.value)}
+                        />
+                        <InputGroup.Text style={{
+                          background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                          border: '1px solid rgba(0,0,0,0.1)',
+                          color: '#6c757d',
+                          fontSize: '14px'
+                        }}>₺</InputGroup.Text>
+                      </InputGroup>
+                    </div>
+                    <div className="col-12 col-md-2 d-grid">
+                      <Button 
+                        variant="outline-danger" 
+                        size="sm"
+                        style={{
+                          ...softStyles.button,
+                          background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                          color: 'white',
+                          border: 'none',
+                          fontSize: '13px',
+                          padding: '8px 12px'
+                        }}
+                        onClick={() => remPending(i)}
+                      >
+                        🗑️ Sil
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
-              <div className="d-flex flex-column flex-md-row gap-2 justify-content-between mt-2">
+              <div className="d-flex flex-column flex-md-row gap-3 justify-content-between mt-3">
                 <Button
                   variant="outline-primary"
-                  size="sm"
+                  style={{
+                    ...softStyles.button,
+                    background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+                    color: 'white',
+                    border: 'none',
+                    flex: 1,
+                    maxWidth: '200px'
+                  }}
                   onClick={addExpense}
-                  {...hoverGreen}
-                  className="w-100 w-md-auto"
                 >
-                  + Gider Ekle
+                  ➕ Yeni Gider Ekle
                 </Button>
                 <Button
                   variant="success"
-                  size="sm"
+                  style={{
+                    ...softStyles.button,
+                    ...softStyles.primaryButton,
+                    flex: 1,
+                    maxWidth: '200px'
+                  }}
                   onClick={approveExpenses}
-                  {...hoverGreen}
-                  className="w-100 w-md-auto"
                 >
-                  Giderleri Onayla
+                  ✅ Giderleri Onayla
                 </Button>
               </div>
             </Card.Body>
           </Card>
 
-          <h5>Onaylanmış Giderler</h5>
-          <Card className="mb-3">
-            <Card.Body>
+          <h5 style={{
+            ...softStyles.heading,
+            marginBottom: '16px',
+            fontSize: '20px',
+            color: '#495057'
+          }}>
+            ✅ Onaylanmış Giderler
+          </h5>
+          <Card style={{...softStyles.card, marginBottom: '20px'}}>
+            <Card.Body style={{padding: '20px'}}>
               {approvedExpenses.length === 0 ? (
-                <div className="text-muted">Henüz gider yok.</div>
+                <div style={{
+                  textAlign: 'center',
+                  padding: '40px',
+                  color: '#6c757d',
+                  background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(0,0,0,0.05)'
+                }}>
+                  <div style={{fontSize: '2em', marginBottom: '12px'}}>📝</div>
+                  <p style={{margin: 0, fontSize: '14px'}}>Henüz onaylanmış gider bulunmuyor.</p>
+                </div>
               ) : (
-                <Table size="sm" responsive className="mb-0">
-                  <thead>
-                    <tr>
-                      <th>Açıklama</th>
-                      <th>Tür</th>
-                      <th>Tutar</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {approvedExpenses.map((e, i) => (
-                      <tr key={i}>
-                        <td>{e.desc}</td>
-                        <td>{e.type === "cash" ? "Nakit" : "Kart"}</td>
-                        <td>₺{fmt(e.amount)}</td>
+                <div style={{
+                  background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(0,0,0,0.05)'
+                }}>
+                  <Table hover responsive className="mb-0" style={{fontSize: '14px'}}>
+                    <thead style={{
+                      background: 'linear-gradient(135deg, #495057 0%, #6c757d 100%)',
+                      color: 'white'
+                    }}>
+                      <tr>
+                        <th style={{border: 'none', padding: '12px 16px', fontWeight: '600'}}>Açıklama</th>
+                        <th style={{border: 'none', padding: '12px 16px', fontWeight: '600'}}>Tür</th>
+                        <th style={{border: 'none', padding: '12px 16px', fontWeight: '600'}}>Tutar</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                    </thead>
+                    <tbody>
+                      {approvedExpenses.map((e, i) => (
+                        <tr key={i} style={{
+                          borderBottom: i === approvedExpenses.length - 1 ? 'none' : '1px solid rgba(0,0,0,0.05)'
+                        }}>
+                          <td style={{padding: '12px 16px', border: 'none', color: '#495057'}}>{e.desc}</td>
+                          <td style={{padding: '12px 16px', border: 'none'}}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              background: e.type === "cash" ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)' : 'linear-gradient(135deg, #007bff 0%, #6f42c1 100%)',
+                              color: 'white'
+                            }}>
+                              {e.type === "cash" ? "💵 Nakit" : "💳 Kart"}
+                            </span>
+                          </td>
+                          <td style={{padding: '12px 16px', border: 'none'}}>
+                            <span style={{
+                              fontWeight: '600',
+                              color: '#dc3545',
+                              fontSize: '14px'
+                            }}>
+                              ₺{fmt(e.amount)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
               )}
             </Card.Body>
           </Card>
 
           <Row className="g-3 mb-4">
             <Col xs={6} md={6}>
-              <Card className="text-center p-2 mb-2">
-                <Card.Body className="p-2">
-                  <div className="small text-muted">Nakit Masraf Toplamı</div>
-                  <div className="h6">₺{fmt(sumCashExpForm)}</div>
+              <Card style={{
+                ...softStyles.card,
+                background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                color: 'white',
+                textAlign: 'center'
+              }}>
+                <Card.Body style={{padding: '20px'}}>
+                  <div style={{fontSize: '13px', opacity: 0.9, marginBottom: '8px', fontWeight: '500'}}>
+                    💵 Nakit Masraf Toplamı
+                  </div>
+                  <div style={{fontSize: '24px', fontWeight: '700', textShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
+                    ₺{fmt(sumCashExpForm)}
+                  </div>
                 </Card.Body>
               </Card>
             </Col>
             <Col xs={6} md={6}>
-              <Card className="text-center p-2 mb-2">
-                <Card.Body className="p-2">
-                  <div className="small text-muted">Kart Masraf Toplamı</div>
-                  <div className="h6">₺{fmt(sumVisaExpForm)}</div>
+              <Card style={{
+                ...softStyles.card,
+                background: 'linear-gradient(135deg, #007bff 0%, #6f42c1 100%)',
+                color: 'white',
+                textAlign: 'center'
+              }}>
+                <Card.Body style={{padding: '20px'}}>
+                  <div style={{fontSize: '13px', opacity: 0.9, marginBottom: '8px', fontWeight: '500'}}>
+                    💳 Kart Masraf Toplamı
+                  </div>
+                  <div style={{fontSize: '24px', fontWeight: '700', textShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
+                    ₺{fmt(sumVisaExpForm)}
+                  </div>
                 </Card.Body>
               </Card>
             </Col>
           </Row>
 
-          <h5>Not</h5>
-          <Card className="shadow-sm mb-4">
-            <Card.Body>
+          <Row className="g-3 mb-4">
+            <Col xs={12} md={6}>
+              <Card style={{
+                ...softStyles.card,
+                background: 'linear-gradient(135deg, #ffc107 0%, #fd7e14 100%)',
+                color: 'white',
+                textAlign: 'center'
+              }}>
+                <Card.Body style={{padding: '20px'}}>
+                  <div style={{fontSize: '13px', opacity: 0.9, marginBottom: '8px', fontWeight: '500'}}>
+                    💰 Bugünkü Nakit Devir
+                  </div>
+                  <div style={{fontSize: '24px', fontWeight: '700', textShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
+                    ₺{fmt(todayCashCarry)}
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+
+          <h5 style={{
+            ...softStyles.heading,
+            marginBottom: '16px',
+            fontSize: '20px',
+            color: '#495057'
+          }}>
+            📝 Notlar
+          </h5>
+          <Card style={{...softStyles.card, marginBottom: '20px'}}>
+            <Card.Body style={{padding: '20px'}}>
               <Form.Control
                 as="textarea"
-                rows={3}
-                placeholder="Not ekleyin..."
+                rows={4}
+                placeholder="Günlük notlarınızı buraya ekleyebilirsiniz..."
                 value={note}
+                style={{
+                  ...softStyles.formControl,
+                  resize: 'vertical',
+                  fontSize: '14px',
+                  lineHeight: '1.5'
+                }}
                 onChange={(e) => setNote(e.target.value)}
               />
             </Card.Body>
           </Card>
         </>
       )}
+
+      {/* Kayıt Silme Onay Modal'ı */}
+      <Modal 
+        show={showDeleteModal} 
+        onHide={() => setShowDeleteModal(false)}
+        centered
+        size="md"
+      >
+        <Modal.Header 
+          closeButton 
+          style={{
+            background: 'linear-gradient(135deg, #ff6b6b, #ee5a52)',
+            color: 'white',
+            border: 'none'
+          }}
+        >
+          <Modal.Title style={{ fontWeight: '600', fontSize: '18px' }}>
+            <i className="fas fa-exclamation-triangle me-2"></i>
+            Kayıt Silme Onayı
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: '25px' }}>
+          <div className="text-center">
+            <div 
+              style={{
+                width: '70px',
+                height: '70px',
+                background: 'linear-gradient(135deg, #ff6b6b, #ee5a52)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px',
+                color: 'white',
+                fontSize: '24px'
+              }}
+            >
+              <i className="fas fa-trash-alt"></i>
+            </div>
+            <h5 style={{ color: '#2c3e50', marginBottom: '15px', fontWeight: '600' }}>
+              Bu kaydı silmek istediğinizden emin misiniz?
+            </h5>
+            {recordToDelete && (
+              <div 
+                style={{
+                  background: 'linear-gradient(135deg, #f8f9fa, #e9ecef)',
+                  padding: '15px',
+                  borderRadius: '12px',
+                  border: '1px solid #dee2e6',
+                  marginBottom: '20px'
+                }}
+              >
+                <p style={{ margin: '0', color: '#495057', fontSize: '14px' }}>
+                  <strong>Tarih:</strong> {format(parseISO(recordToDelete.date), "dd/MM/yyyy")}
+                </p>
+                <p style={{ margin: '5px 0 0', color: '#495057', fontSize: '14px' }}>
+                  <strong>Tutar:</strong> ₺{parseFloat(recordToDelete.amount || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            )}
+            <div style={{ color: '#6c757d', fontSize: '14px' }}>
+              Bu işlem geri alınamaz!
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer style={{ border: 'none', padding: '0 25px 25px' }}>
+          <div className="d-flex gap-3 w-100">
+            <Button
+              variant="outline-secondary"
+              onClick={() => setShowDeleteModal(false)}
+              style={{
+                flex: '1',
+                padding: '12px',
+                border: '2px solid #6c757d',
+                borderRadius: '10px',
+                fontWeight: '600',
+                fontSize: '14px',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = '#6c757d';
+                e.target.style.color = 'white';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = 'transparent';
+                e.target.style.color = '#6c757d';
+              }}
+            >
+              <i className="fas fa-times me-2"></i>
+              İptal
+            </Button>
+            <Button
+              variant="danger"
+              onClick={confirmDeleteRecord}
+              style={{
+                flex: '1',
+                padding: '12px',
+                background: 'linear-gradient(135deg, #ff6b6b, #ee5a52)',
+                border: 'none',
+                borderRadius: '10px',
+                fontWeight: '600',
+                fontSize: '14px',
+                boxShadow: '0 4px 15px rgba(255, 107, 107, 0.3)',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 4px 15px rgba(255, 107, 107, 0.3)';
+              }}
+            >
+              <i className="fas fa-trash-alt me-2"></i>
+              Sil
+            </Button>
+          </div>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 }
